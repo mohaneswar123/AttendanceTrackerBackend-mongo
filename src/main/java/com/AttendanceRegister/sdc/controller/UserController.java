@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.AttendanceRegister.sdc.dto.LoginRequest;
@@ -30,14 +31,23 @@ public class UserController {
     @PostMapping("/register")
     public ResponseEntity<User> registerUser(@RequestBody User user) {
         User registered = userService.registerUser(user);
+        
         return ResponseEntity.ok(registered);
     }
  // UserController.java
     @PostMapping("/login")
-    public ResponseEntity<User> login(@RequestBody LoginRequest request) {
-        User user = userService.validateLogin(request.getEmail(), request.getPassword());
-        return ResponseEntity.ok(user);
+    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
+        try {
+            User user = userService.validateLogin(request.getEmail(), request.getPassword());
+            return ResponseEntity.ok(user);
+
+        } catch (RuntimeException ex) {
+            // RETURN EXACT MESSAGE (not LOGIN_FAILED)
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
     }
+
+
 
     // ✅ Get user by ID
     @GetMapping("/{userId}")
@@ -66,4 +76,22 @@ public class UserController {
         User updatedUser = userService.updateEmail(userId, newEmail);
         return ResponseEntity.ok(updatedUser);
     }
+    
+ // ✅ ADMIN: Activate user for X days
+    @PutMapping("/admin/activate/{userId}")
+    public ResponseEntity<User> activateUser(
+            @PathVariable String userId,@RequestParam int days) {
+
+        User activatedUser = userService.activateUser(userId, days);
+        return ResponseEntity.ok(activatedUser);
+    }
+
+    // ✅ ADMIN: Deactivate user
+    @PutMapping("/admin/deactivate/{userId}")
+    public ResponseEntity<User> deactivateUser(@PathVariable String userId) {
+        User deactivated = userService.deactivateUser(userId);
+        return ResponseEntity.ok(deactivated);
+    }
+
+    
 }

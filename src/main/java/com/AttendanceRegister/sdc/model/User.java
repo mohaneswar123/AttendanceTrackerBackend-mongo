@@ -2,6 +2,7 @@ package com.AttendanceRegister.sdc.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import java.time.LocalDate;
 
 @Document(collection = "user_table")
 public class User {
@@ -14,6 +15,10 @@ public class User {
     private String password;
 
     private String email;
+
+    // 👉 NEW subscription fields
+    private boolean active = false;     // false by default
+    private LocalDate paidTill;         // date until access is allowed
 
     // 👉 Constructors
     public User() {}
@@ -57,7 +62,23 @@ public class User {
         this.email = email;
     }
 
-    // 👉 Optional: no relationships now
+    // 👉 NEW getters/setters
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public LocalDate getPaidTill() {
+        return paidTill;
+    }
+
+    public void setPaidTill(LocalDate paidTill) {
+        this.paidTill = paidTill;
+    }
+
     @Override
     public String toString() {
         return "User{" +
@@ -65,6 +86,8 @@ public class User {
                 ", username='" + username + '\'' +
                 ", password='" + password + '\'' +
                 ", email='" + email + '\'' +
+                ", active=" + active +
+                ", paidTill=" + paidTill +
                 '}';
     }
 }
