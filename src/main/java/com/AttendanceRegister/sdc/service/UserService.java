@@ -44,16 +44,22 @@ public class UserService {
 
     // Register new user
     public User registerUser(User user) {
+
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new RuntimeException("Username already exists");
         }
 
-        user.setActive(false); // NEW → make newly registered user INACTIVE
-        user.setPaidTill(LocalDate.now().minusDays(1));
+        if (userRepository.existsByEmail(user.getEmail())) {
+            throw new RuntimeException("Email already exists");
+        }
 
+        // Make the new user inactive by default
+        user.setActive(false);
+        user.setPaidTill(LocalDate.now().minusDays(1)); 
 
         return userRepository.save(user);
     }
+
 
 
     public User getUserById(String id) {
