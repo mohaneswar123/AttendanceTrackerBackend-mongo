@@ -1,6 +1,7 @@
 package com.AttendanceRegister.sdc.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -72,10 +73,30 @@ public class UserController {
     @PutMapping("/{userId}/email")
     public ResponseEntity<User> updateEmail(
             @PathVariable String userId,
-            @RequestBody String newEmail) {
+            @RequestBody Map<String, String> req) {
+
+        String newEmail = req.get("email");
         User updatedUser = userService.updateEmail(userId, newEmail);
         return ResponseEntity.ok(updatedUser);
     }
+
+    
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> req) {
+
+        String email = req.get("email");
+        String oldPassword = req.get("oldPassword");
+        String newPassword = req.get("newPassword");
+
+        String result = userService.changePassword(email, oldPassword, newPassword);
+
+        if (result.equals("Password updated successfully")) {
+            return ResponseEntity.ok(result);
+        } else {
+            return ResponseEntity.status(400).body(result);
+        }
+    }
+
     
  // ✅ ADMIN: Activate user for X days
     @PutMapping("/admin/activate/{userId}")

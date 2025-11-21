@@ -10,7 +10,7 @@ import com.AttendanceRegister.sdc.model.User;
 public interface UserRepository extends MongoRepository<User, String> {
     Optional<User> findByUsername(String username);
     boolean existsByUsername(String username);
-	Optional<User> findByEmail(String email);
+	User findByEmail(String email);
 	boolean existsByEmail(String email);
 }
 

@@ -17,29 +17,32 @@ public class UserService {
 
     public User validateLogin(String email, String rawPassword) {
 
-        // Email check (returns same message on failure)
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+        // Email check
+        User user = userRepository.findByEmail(email);
+        if (user == null) {
+            throw new RuntimeException("Invalid email or password");
+        }
 
-        // Password check (same message)
+        // Password check
         if (!user.getPassword().equals(rawPassword)) {
             throw new RuntimeException("Invalid email or password");
         }
 
-        // Subscription check - inactive
-        if (!user.isActive()) {
-            throw new RuntimeException("Your subscription is not active. Please pay ₹10.");
-        }
-
-        // Subscription check - expired
+        // Subscription expired
         if (user.getPaidTill() != null && user.getPaidTill().isBefore(LocalDate.now())) {
             user.setActive(false);
             userRepository.save(user);
-            throw new RuntimeException("Your subscription expired. Please pay ₹10.");
+            throw new RuntimeException("Your subscription expired. Please pay ₹5.");
+        }
+
+        // Subscription inactive
+        if (!user.isActive()) {
+            throw new RuntimeException("Your subscription is not active. Please pay ₹5.");
         }
 
         return user;
     }
+
 
 
     // Register new user
@@ -60,6 +63,23 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    public String changePassword(String email, String oldPassword, String newPassword) {
+
+        User user = userRepository.findByEmail(email);
+
+        if (user == null) {
+            return "User not found";
+        }
+
+        if (!user.getPassword().equals(oldPassword)) {
+            return "Old password is incorrect";
+        }
+
+        user.setPassword(newPassword);
+        userRepository.save(user);
+
+        return "Password updated successfully";
+    }
 
 
     public User getUserById(String id) {
