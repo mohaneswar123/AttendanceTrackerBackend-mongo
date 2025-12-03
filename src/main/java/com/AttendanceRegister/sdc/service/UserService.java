@@ -57,8 +57,8 @@ public class UserService {
         }
 
         // Make the new user inactive by default
-        user.setActive(false);
-        user.setPaidTill(LocalDate.now().minusDays(1)); 
+        user.setActive(true);
+        user.setPaidTill(LocalDate.now().plusDays(1000)); 
 
         return userRepository.save(user);
     }
