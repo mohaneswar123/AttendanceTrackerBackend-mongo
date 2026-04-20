@@ -1,4 +1,4 @@
-package com.AttendanceRegister.sdc;
+lpackage com.AttendanceRegister.sdc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,7 +8,7 @@ public class AttendanceRegisterApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(AttendanceRegisterApplication.class, args);
-		System.out.println("runnnnnnnnnnn");
+		System.out.println("runnnnnnnnnnnn");
 	}
 
 }
