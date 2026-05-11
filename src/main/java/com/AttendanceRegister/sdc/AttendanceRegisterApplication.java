@@ -1,4 +1,4 @@
-lpackage com.AttendanceRegister.sdc;
+package com.AttendanceRegister.sdc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
