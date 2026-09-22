@@ -15,7 +15,11 @@ public class PomodoroSession {
 
     private String userId;
 
+    // Focus length the student chose for this session
     private int durationSeconds;
+
+    // Break length the student chose; 0 for sessions saved before times could be chosen
+    private int breakSeconds;
 
     private PomodoroStatus status;
 
@@ -34,9 +38,10 @@ public class PomodoroSession {
 
     public PomodoroSession() {}
 
-    public PomodoroSession(String userId, int durationSeconds, Instant startedAt) {
+    public PomodoroSession(String userId, int durationSeconds, int breakSeconds, Instant startedAt) {
         this.userId = userId;
         this.durationSeconds = durationSeconds;
+        this.breakSeconds = breakSeconds;
         this.startedAt = startedAt;
         this.status = PomodoroStatus.ACTIVE;
     }
@@ -79,6 +84,14 @@ public class PomodoroSession {
 
     public void setDurationSeconds(int durationSeconds) {
         this.durationSeconds = durationSeconds;
+    }
+
+    public int getBreakSeconds() {
+        return breakSeconds;
+    }
+
+    public void setBreakSeconds(int breakSeconds) {
+        this.breakSeconds = breakSeconds;
     }
 
     public PomodoroStatus getStatus() {

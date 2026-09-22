@@ -19,6 +19,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
@@ -74,7 +75,7 @@ class PomodoroServiceTest {
     }
 
     private static PomodoroSession session(PomodoroStatus status) {
-        PomodoroSession session = new PomodoroSession("u1", FOCUS, T0);
+        PomodoroSession session = new PomodoroSession("u1", FOCUS, BREAK, T0);
         session.setId("s1");
         session.setStatus(status);
         return session;
@@ -122,7 +123,7 @@ class PomodoroServiceTest {
             return saved;
         });
 
-        PomodoroState state = service.start("u1");
+        PomodoroState state = service.start("u1", null, null);
 
         assertThat(state.phase()).isEqualTo(Phase.FOCUS);
         assertThat(state.sessionId()).isEqualTo("s1");
@@ -131,10 +132,32 @@ class PomodoroServiceTest {
     }
 
     @Test
+    void startUsesTheTimesTheStudentChose() {
+        givenNothingActive();
+        givenLatest(null);
+        ArgumentCaptor<PomodoroSession> saved = ArgumentCaptor.forClass(PomodoroSession.class);
+        when(repository.insert(saved.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        PomodoroState state = service.start("u1", 45, 10);
+
+        assertThat(state.remainingSeconds()).isEqualTo(45 * 60);
+        assertThat(state.totalSeconds()).isEqualTo(45 * 60);
+        assertThat(saved.getValue().getBreakSeconds()).isEqualTo(10 * 60);
+    }
+
+    @Test
+    void chosenTimesMustBeWithinLimits() {
+        assertApiError(catchThrowable(() -> service.start("u1", 0, 5)), HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+        assertApiError(catchThrowable(() -> service.start("u1", 121, 5)), HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+        assertApiError(catchThrowable(() -> service.start("u1", 25, 31)), HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+        verify(repository, never()).insert(any(PomodoroSession.class));
+    }
+
+    @Test
     void startIsRefusedWhileFocusIsRunning() {
         givenActive(session(PomodoroStatus.ACTIVE));
 
-        assertApiError(catchThrowable(() -> service.start("u1")), HttpStatus.CONFLICT, "FOCUS_ALREADY_RUNNING");
+        assertApiError(catchThrowable(() -> service.start("u1", null, null)), HttpStatus.CONFLICT, "FOCUS_ALREADY_RUNNING");
         verify(repository, never()).insert(any(PomodoroSession.class));
     }
 
@@ -144,7 +167,35 @@ class PomodoroServiceTest {
         givenLatest(null);
         when(repository.insert(any(PomodoroSession.class))).thenThrow(new DuplicateKeyException("one_active_session_per_user"));
 
-        assertApiError(catchThrowable(() -> service.start("u1")), HttpStatus.CONFLICT, "FOCUS_ALREADY_RUNNING");
+        assertApiError(catchThrowable(() -> service.start("u1", null, null)), HttpStatus.CONFLICT, "FOCUS_ALREADY_RUNNING");
+    }
+
+    @Test
+    void breakUsesTheLengthChosenForThatSession() {
+        PomodoroSession done = session(PomodoroStatus.COMPLETED);
+        done.setBreakSeconds(600);
+        done.setCompletedAt(T0.plusSeconds(FOCUS));
+        givenNothingActive();
+        givenLatest(done);
+        clock.advance(Duration.ofSeconds(FOCUS + 100));
+
+        PomodoroState state = service.current("u1");
+
+        assertThat(state.phase()).isEqualTo(Phase.BREAK);
+        assertThat(state.totalSeconds()).isEqualTo(600);
+        assertThat(state.remainingSeconds()).isEqualTo(500);
+    }
+
+    @Test
+    void sessionsSavedBeforeChoosingTimesGetTheDefaultBreak() {
+        PomodoroSession done = session(PomodoroStatus.COMPLETED);
+        done.setBreakSeconds(0);
+        done.setCompletedAt(T0.plusSeconds(FOCUS));
+        givenNothingActive();
+        givenLatest(done);
+        clock.advance(Duration.ofSeconds(FOCUS + 100));
+
+        assertThat(service.current("u1").remainingSeconds()).isEqualTo(BREAK - 100);
     }
 
     @Test
