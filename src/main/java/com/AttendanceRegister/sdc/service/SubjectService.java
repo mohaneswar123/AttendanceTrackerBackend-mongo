@@ -6,13 +6,13 @@ import org.springframework.stereotype.Service;
 import com.AttendanceRegister.sdc.Repository.AttendanceRecordRepository;
 import com.AttendanceRegister.sdc.Repository.SubjectRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
+import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.Subject;
 
 @Service
 public class SubjectService {
 
     private final AttendanceRecordRepository attendanceRecordRepository;
-
     private final SubjectRepository subjectRepository;
     private final UserRepository userRepository;
 
@@ -24,11 +24,13 @@ public class SubjectService {
 
     // ✅ Add a new subject for a user
     public Subject addSubject(String userId, String subjectName) {
-        userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
-
-        Subject subject = new Subject(subjectName, userId);
-        return subjectRepository.save(subject);
+        if (!userRepository.existsById(userId)) {
+            throw ApiException.notFound("User not found with ID: " + userId);
+        }
+        if (subjectName == null || subjectName.isBlank()) {
+            throw ApiException.badRequest("Subject name is required");
+        }
+        return subjectRepository.save(new Subject(subjectName.trim(), userId));
     }
 
     // ✅ Get all subjects for a user
@@ -36,22 +38,13 @@ public class SubjectService {
         return subjectRepository.findByUserId(userId);
     }
 
+    // ✅ Delete a user's subject together with its attendance records
     public void deleteSubjectForUser(String subjectId, String userId) {
-        if (!subjectRepository.existsById(subjectId)) {
-            throw new RuntimeException("Subject not found with ID: " + subjectId);
-        }
+        Subject subject = subjectRepository.findById(subjectId)
+                .filter(s -> userId.equals(s.getUserId()))
+                .orElseThrow(() -> ApiException.notFound("Subject not found with ID: " + subjectId));
 
-        // Delete all related attendance records first
-        attendanceRecordRepository.deleteBySubjectIdAndUserId(subjectId, userId);
-
-        // Then delete the subject
-        subjectRepository.deleteById(subjectId);
-    }
-
-
-    // ✅ Delete all subjects associated with a user
-    public void deleteAllSubjectsByUser(String userId) {
-        List<Subject> subjects = subjectRepository.findByUserId(userId);
-        subjectRepository.deleteAll(subjects);
+        attendanceRecordRepository.deleteBySubjectIdAndUserId(subject.getId(), userId);
+        subjectRepository.deleteById(subject.getId());
     }
 }

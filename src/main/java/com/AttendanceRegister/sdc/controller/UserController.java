@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,8 +16,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.AttendanceRegister.sdc.dto.AuthResponse;
 import com.AttendanceRegister.sdc.dto.LoginRequest;
+import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.model.User;
+import com.AttendanceRegister.sdc.security.AccessGuard;
+import com.AttendanceRegister.sdc.security.TokenService;
 import com.AttendanceRegister.sdc.service.UserService;
 
 @RestController
@@ -23,46 +29,50 @@ import com.AttendanceRegister.sdc.service.UserService;
 public class UserController {
 
     private final UserService userService;
+    private final TokenService tokenService;
+    private final AccessGuard accessGuard;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, TokenService tokenService, AccessGuard accessGuard) {
         this.userService = userService;
+        this.tokenService = tokenService;
+        this.accessGuard = accessGuard;
     }
 
-    // ✅ Register new user
+    // ✅ Register new user (public)
     @PostMapping("/register")
-    public ResponseEntity<User> registerUser(@RequestBody User user) {
-        User registered = userService.registerUser(user);
-        
-        return ResponseEntity.ok(registered);
+    public ResponseEntity<User> registerUser(@RequestBody RegisterRequest request) {
+        return ResponseEntity.ok(userService.registerUser(request));
     }
- // UserController.java
+
+    // ✅ Log in (public); returns a bearer token for the other endpoints
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        try {
-            User user = userService.validateLogin(request.getEmail(), request.getPassword());
-            return ResponseEntity.ok(user);
-
-        } catch (RuntimeException ex) {
-            // RETURN EXACT MESSAGE (not LOGIN_FAILED)
-            return ResponseEntity.badRequest().body(ex.getMessage());
-        }
+    public ResponseEntity<AuthResponse<User>> login(@RequestBody LoginRequest request) {
+        User user = userService.validateLogin(request.getEmail(), request.getPassword());
+        return ResponseEntity.ok(new AuthResponse<>(tokenService.issueUserToken(user), user));
     }
 
+    // ✅ Signed-in user's account; 403 SUBSCRIPTION_* once it is no longer active
+    @GetMapping("/me")
+    public ResponseEntity<User> getCurrentUser(@AuthenticationPrincipal Jwt jwt) {
+        User user = accessGuard.currentUser(jwt);
+        userService.requireActiveSubscription(user);
+        return ResponseEntity.ok(user);
+    }
 
-
-    // ✅ Get user by ID
+    // ✅ Get user by ID (the user themselves or an admin)
     @GetMapping("/{userId}")
-    public ResponseEntity<User> getUserById(@PathVariable String userId) {
+    public ResponseEntity<User> getUserById(@AuthenticationPrincipal Jwt jwt, @PathVariable String userId) {
+        accessGuard.requireSelfOrAdmin(jwt, userId);
         return ResponseEntity.ok(userService.getUserById(userId));
     }
 
-    // ✅ Get all users
+    // ✅ ADMIN: Get all users
     @GetMapping
     public ResponseEntity<List<User>> getAllUsers() {
         return ResponseEntity.ok(userService.getAllUsers());
     }
 
-    // ✅ Delete user
+    // ✅ ADMIN: Delete user with all their subjects and attendance
     @DeleteMapping("/{userId}")
     public ResponseEntity<Void> deleteUser(@PathVariable String userId) {
         userService.deleteUser(userId);
@@ -72,47 +82,44 @@ public class UserController {
     // ✅ Update email
     @PutMapping("/{userId}/email")
     public ResponseEntity<User> updateEmail(
+            @AuthenticationPrincipal Jwt jwt,
             @PathVariable String userId,
             @RequestBody Map<String, String> req) {
 
-        String newEmail = req.get("email");
-        User updatedUser = userService.updateEmail(userId, newEmail);
-        return ResponseEntity.ok(updatedUser);
+        accessGuard.requireActiveSelfOrAdmin(jwt, userId);
+        return ResponseEntity.ok(userService.updateEmail(userId, req.get("email")));
     }
 
-    
+    // ✅ Change the signed-in user's password
     @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> req) {
+    public ResponseEntity<Map<String, String>> changePassword(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, String> req) {
 
-        String email = req.get("email");
-        String oldPassword = req.get("oldPassword");
-        String newPassword = req.get("newPassword");
-
-        String result = userService.changePassword(email, oldPassword, newPassword);
-
-        if (result.equals("Password updated successfully")) {
-            return ResponseEntity.ok(result);
-        } else {
-            return ResponseEntity.status(400).body(result);
-        }
+        User user = accessGuard.currentUser(jwt);
+        userService.changePassword(user, req.get("oldPassword"), req.get("newPassword"));
+        return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
     }
 
-    
- // ✅ ADMIN: Activate user for X days
+    // ✅ ADMIN: Activate user for X days
     @PutMapping("/admin/activate/{userId}")
-    public ResponseEntity<User> activateUser(
-            @PathVariable String userId,@RequestParam int days) {
-
-        User activatedUser = userService.activateUser(userId, days);
-        return ResponseEntity.ok(activatedUser);
+    public ResponseEntity<User> activateUser(@PathVariable String userId, @RequestParam int days) {
+        return ResponseEntity.ok(userService.activateUser(userId, days));
     }
 
     // ✅ ADMIN: Deactivate user
     @PutMapping("/admin/deactivate/{userId}")
     public ResponseEntity<User> deactivateUser(@PathVariable String userId) {
-        User deactivated = userService.deactivateUser(userId);
-        return ResponseEntity.ok(deactivated);
+        return ResponseEntity.ok(userService.deactivateUser(userId));
     }
 
-    
+    // ✅ ADMIN: Set a new password for a user who has forgotten theirs
+    @PutMapping("/admin/{userId}/password")
+    public ResponseEntity<Map<String, String>> setPassword(
+            @PathVariable String userId,
+            @RequestBody Map<String, String> req) {
+
+        userService.setPassword(userId, req.get("password"));
+        return ResponseEntity.ok(Map.of("message", "Password updated"));
+    }
 }

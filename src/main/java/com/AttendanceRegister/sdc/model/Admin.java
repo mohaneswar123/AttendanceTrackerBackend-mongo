@@ -2,6 +2,7 @@ package com.AttendanceRegister.sdc.model;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Document(collection = "admin_table")
 public class Admin {
@@ -11,6 +12,8 @@ public class Admin {
 
     private String email;
 
+    // BCrypt hash. Never sent to clients.
+    @JsonIgnore
     private String password;
 
     // 👉 Constructors
@@ -51,7 +54,6 @@ public class Admin {
         return "Admin{" +
                 "id=" + id +
                 ", email='" + email + '\'' +
-                ", password='" + password + '\'' +
                 '}';
     }
 }

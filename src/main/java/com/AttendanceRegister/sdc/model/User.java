@@ -1,8 +1,8 @@
 package com.AttendanceRegister.sdc.model;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDate;
 
 @Document(collection = "user_table")
@@ -10,9 +10,12 @@ public class User {
 
     @Id
     private String id;
-    @Indexed(unique = true)
+
+    // The name entered as "Full Name" at sign-up; several students may share one
     private String username;
-    @Indexed(unique = true)
+
+    // BCrypt hash. Never sent to clients.
+    @JsonIgnore
     private String password;
 
     private String email;
@@ -85,7 +88,6 @@ public class User {
         return "User{" +
                 "id=" + id +
                 ", username='" + username + '\'' +
-                ", password='" + password + '\'' +
                 ", email='" + email + '\'' +
                 ", active=" + active +
                 ", paidTill=" + paidTill +

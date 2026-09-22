@@ -1,88 +1,105 @@
 package com.AttendanceRegister.sdc.service;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 
 import com.AttendanceRegister.sdc.Repository.AttendanceRecordRepository;
 import com.AttendanceRegister.sdc.Repository.SubjectRepository;
-import com.AttendanceRegister.sdc.Repository.UserRepository;
+import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
 
 @Service
 public class AttendanceRecordService {
 
+    private static final Set<String> STATUSES = Set.of("Present", "Absent", "No Class");
+    private static final int MIN_HOURS = 1;
+    private static final int MAX_HOURS = 3;
+
     private final AttendanceRecordRepository attendanceRecordRepository;
-    private final UserRepository userRepository;
     private final SubjectRepository subjectRepository;
 
     public AttendanceRecordService(
             AttendanceRecordRepository attendanceRecordRepository,
-            UserRepository userRepository,
             SubjectRepository subjectRepository
     ) {
         this.attendanceRecordRepository = attendanceRecordRepository;
-        this.userRepository = userRepository;
         this.subjectRepository = subjectRepository;
     }
 
-    // ✅ Add a new attendance record (with classNumber)
+    // ✅ Add a new attendance record; classNumber is the class length in hours
     public AttendanceRecord addRecord(String userId, String subjectId, String status, String date, int classNumber) {
-    userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("User not found with ID: " + userId));
+        requireSubjectOfUser(subjectId, userId);
+        validateStatus(status);
+        validateDate(date);
+        validateHours(classNumber);
 
-    subjectRepository.findById(subjectId)
-        .orElseThrow(() -> new RuntimeException("Subject not found with ID: " + subjectId));
-
-    // Optional: duplicate check can be added if needed using existsByUserIdAndSubjectId...
-    AttendanceRecord record = new AttendanceRecord(status, date, classNumber, userId, subjectId);
-    return attendanceRecordRepository.save(record);
+        AttendanceRecord record = new AttendanceRecord(status, date, classNumber, userId, subjectId);
+        return attendanceRecordRepository.save(record);
     }
-
 
     // ✅ Get all attendance records for a user
     public List<AttendanceRecord> getRecordsByUser(String userId) {
         return attendanceRecordRepository.findByUserId(userId);
     }
 
-    // ✅ Optional: Get all attendance records
-    public List<AttendanceRecord> getAllRecords() {
-        return attendanceRecordRepository.findAll();
+    public AttendanceRecord getRecord(String id) {
+        return attendanceRecordRepository.findById(id)
+                .orElseThrow(() -> ApiException.notFound("Record not found with ID: " + id));
     }
-    
-    
-    // ✅ Update a specific record
-    public AttendanceRecord updateRecord(String id, AttendanceRecord updated) {
-        AttendanceRecord existing = attendanceRecordRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Record not found with ID: " + id));
 
-        existing.setStatus(updated.getStatus());
-        existing.setDate(updated.getDate());
-        existing.setSubjectId(updated.getSubjectId());
-        existing.setClassNumber(updated.getClassNumber());
-
+    // ✅ Update a record; fields left out of the request keep their current value
+    public AttendanceRecord updateRecord(AttendanceRecord existing, AttendanceRecord updated) {
+        if (updated.getStatus() != null) {
+            validateStatus(updated.getStatus());
+            existing.setStatus(updated.getStatus());
+        }
+        if (updated.getDate() != null) {
+            validateDate(updated.getDate());
+            existing.setDate(updated.getDate());
+        }
+        if (updated.getSubjectId() != null) {
+            requireSubjectOfUser(updated.getSubjectId(), existing.getUserId());
+            existing.setSubjectId(updated.getSubjectId());
+        }
+        if (updated.getClassNumber() != 0) {
+            validateHours(updated.getClassNumber());
+            existing.setClassNumber(updated.getClassNumber());
+        }
         return attendanceRecordRepository.save(existing);
     }
 
-    public void deleteBySubjectDateAndClassNumber(String subjectId, String date, int classNumber) {
-        if (!subjectRepository.existsById(subjectId)) {
-            throw new RuntimeException("Subject not found with ID: " + subjectId);
-        }
-        attendanceRecordRepository.deleteBySubjectIdAndDateAndClassNumber(subjectId, date, classNumber);
+    // ✅ Delete a record
+    public void deleteRecord(AttendanceRecord record) {
+        attendanceRecordRepository.deleteById(record.getId());
     }
 
-
-    // ✅ Delete a record by ID
-    public void deleteRecord(String id) {
-        if (!attendanceRecordRepository.existsById(id)) {
-            throw new RuntimeException("Record not found with ID: " + id);
-        }
-        attendanceRecordRepository.deleteById(id);
+    private void requireSubjectOfUser(String subjectId, String userId) {
+        subjectRepository.findById(subjectId)
+                .filter(subject -> userId.equals(subject.getUserId()))
+                .orElseThrow(() -> ApiException.notFound("Subject not found with ID: " + subjectId));
     }
 
-    // ✅ Delete all records of a user
-    public void deleteAllRecordsByUser(String userId) {
-        List<AttendanceRecord> records = attendanceRecordRepository.findByUserId(userId);
-        attendanceRecordRepository.deleteAll(records);
+    private static void validateStatus(String status) {
+        if (!STATUSES.contains(status)) {
+            throw ApiException.badRequest("Status must be Present, Absent or No Class");
+        }
+    }
+
+    private static void validateDate(String date) {
+        try {
+            LocalDate.parse(date);
+        } catch (DateTimeParseException | NullPointerException ex) {
+            throw ApiException.badRequest("Date must be in YYYY-MM-DD format");
+        }
+    }
+
+    private static void validateHours(int hours) {
+        if (hours < MIN_HOURS || hours > MAX_HOURS) {
+            throw ApiException.badRequest("Class length must be between " + MIN_HOURS + " and " + MAX_HOURS + " hours");
+        }
     }
 }
