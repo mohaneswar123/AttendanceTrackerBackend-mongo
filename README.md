@@ -15,6 +15,7 @@ The API listens on http://localhost:8080. Run the tests with `./mvnw test`. They
 | Environment variable | Default | Purpose |
 |---|---|---|
 | `JWT_SECRET` | random at startup | Key that signs login tokens, at least 32 characters. **Set it in production.** Without it, every restart signs everyone out. |
+| `CALENDAR_TIME_ZONE` | `Asia/Kolkata` | Time zone for calendar dates and times; all students see entries in this zone |
 | `CORS_ALLOWED_ORIGINS` | `https://attendanceinhand.netlify.app,http://localhost:5173` | Comma-separated frontend origins allowed to call the API |
 | `PORT` | `8080` | HTTP port (Render sets this) |
 
@@ -70,6 +71,24 @@ These two features are separate from each other and only for students with an ac
 | `GET /api/pomodoro/current` | `{phase: IDLE / FOCUS / BREAK, sessionId, remainingSeconds, totalSeconds, paused}` |
 | `POST /api/pomodoro/start` `{focusMinutes, breakMinutes}` | Starts a focus session with the student's chosen lengths: focus 1–120 minutes, break 1–30. Leave either out (or send no body) for the default 25 and 5. 409 `FOCUS_ALREADY_RUNNING` if one is running. |
 | `PUT /api/pomodoro/{id}/pause`, `/resume`, `/stop`, `/complete`, `/skip-break` | Each returns the new state. `/complete` is safe to repeat. |
+
+### Calendar
+
+Student-only, like Tasks and Pomodoro, and separate from both.
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/calendar/events?from=&to=&q=` | Entries dated between two `YYYY-MM-DD` dates (inclusive, either optional) and/or whose title contains `q`, sorted by date with all-day entries first. Searches return at most 100. |
+| `GET /api/calendar/events/{id}` | One entry |
+| `POST /api/calendar/events` `{title, type, date, allDay, startTime, endTime}` | Create. `type` is `EVENT` or `REMINDER` (a reminder never notifies). Times are `HH:mm`; `startTime` is needed unless `allDay`, and `endTime` is optional but must be later the same day. |
+| `PUT /api/calendar/events/{id}` | Update, with the same body |
+| `DELETE /api/calendar/events/{id}` | Delete |
+
+- Dates and times are read and returned in `CALENDAR_TIME_ZONE`. The date and times are always worked out together from the request, so an entry's start time can never fall on a different day than its date.
+- All-day entries have no times, so they stay on the same date everywhere.
+- Entries can't run past midnight.
+
+### How the Pomodoro timer works
 
 The timer's state is kept on the server:
 - The break is timed from when the focus session ended.

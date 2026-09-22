@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import com.AttendanceRegister.sdc.Repository.CalendarEventRepository;
 import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
 import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
@@ -22,14 +23,17 @@ public class UserService {
     private final ResetService resetService;
     private final TaskRepository taskRepository;
     private final PomodoroSessionRepository pomodoroSessionRepository;
+    private final CalendarEventRepository calendarEventRepository;
 
     public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService,
-                       TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository) {
+                       TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository,
+                       CalendarEventRepository calendarEventRepository) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.resetService = resetService;
         this.taskRepository = taskRepository;
         this.pomodoroSessionRepository = pomodoroSessionRepository;
+        this.calendarEventRepository = calendarEventRepository;
     }
 
     public User validateLogin(String email, String rawPassword) {
@@ -101,7 +105,7 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    // Deletes the user together with their subjects, attendance, tasks and focus sessions
+    // Deletes the user together with their subjects, attendance, tasks, focus sessions and calendar
     public void deleteUser(String id) {
         if (!userRepository.existsById(id)) {
             throw ApiException.notFound("User not found with ID: " + id);
@@ -109,6 +113,7 @@ public class UserService {
         resetService.resetUserData(id);
         taskRepository.deleteByUserId(id);
         pomodoroSessionRepository.deleteByUserId(id);
+        calendarEventRepository.deleteByUserId(id);
         userRepository.deleteById(id);
     }
 
