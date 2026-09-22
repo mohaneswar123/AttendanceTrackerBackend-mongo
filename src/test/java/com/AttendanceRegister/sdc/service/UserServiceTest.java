@@ -18,6 +18,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
+import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -33,13 +35,19 @@ class UserServiceTest {
     @Mock
     private ResetService resetService;
 
+    @Mock
+    private TaskRepository taskRepository;
+
+    @Mock
+    private PomodoroSessionRepository pomodoroSessionRepository;
+
     private final PasswordHasher passwordHasher = new PasswordHasher();
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordHasher, resetService);
+        userService = new UserService(userRepository, passwordHasher, resetService, taskRepository, pomodoroSessionRepository);
     }
 
     private static User user(String storedPassword, boolean active, LocalDate paidTill) {
@@ -178,6 +186,18 @@ class UserServiceTest {
 
         assertThat(passwordHasher.matches("secret2", stored.getPassword())).isTrue();
         verify(userRepository).save(stored);
+    }
+
+    @Test
+    void deleteUserRemovesAllTheirData() {
+        when(userRepository.existsById("u1")).thenReturn(true);
+
+        userService.deleteUser("u1");
+
+        verify(resetService).resetUserData("u1");
+        verify(taskRepository).deleteByUserId("u1");
+        verify(pomodoroSessionRepository).deleteByUserId("u1");
+        verify(userRepository).deleteById("u1");
     }
 
     @Test

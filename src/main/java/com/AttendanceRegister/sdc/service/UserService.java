@@ -6,6 +6,8 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
+import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -18,11 +20,16 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordHasher passwordHasher;
     private final ResetService resetService;
+    private final TaskRepository taskRepository;
+    private final PomodoroSessionRepository pomodoroSessionRepository;
 
-    public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService) {
+    public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService,
+                       TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.resetService = resetService;
+        this.taskRepository = taskRepository;
+        this.pomodoroSessionRepository = pomodoroSessionRepository;
     }
 
     public User validateLogin(String email, String rawPassword) {
@@ -94,12 +101,14 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    // Deletes the user together with their subjects and attendance records
+    // Deletes the user together with their subjects, attendance, tasks and focus sessions
     public void deleteUser(String id) {
         if (!userRepository.existsById(id)) {
             throw ApiException.notFound("User not found with ID: " + id);
         }
         resetService.resetUserData(id);
+        taskRepository.deleteByUserId(id);
+        pomodoroSessionRepository.deleteByUserId(id);
         userRepository.deleteById(id);
     }
 

@@ -50,4 +50,15 @@ public class AccessGuard {
             userService.requireActiveSubscription(currentUser(jwt));
         }
     }
+
+    // For student-only features (tasks, Pomodoro): the signed-in student, whose
+    // subscription must be active. The student always comes from the token, never the request.
+    public User requireActiveStudent(Jwt jwt) {
+        if (isAdmin(jwt)) {
+            throw ApiException.forbidden();
+        }
+        User user = currentUser(jwt);
+        userService.requireActiveSubscription(user);
+        return user;
+    }
 }
