@@ -24,6 +24,9 @@ public class PomodoroService {
 
     // How early the client may report the end, to allow for timer and network lag
     private static final long COMPLETE_TOLERANCE_MILLIS = 5_000;
+    // Limits on the lengths a student can choose, in minutes
+    static final int MAX_FOCUS_MINUTES = 120;
+    static final int MAX_BREAK_MINUTES = 30;
 
     private final PomodoroSessionRepository sessionRepository;
     private final Clock clock;
@@ -54,12 +57,15 @@ public class PomodoroService {
         return breakOrIdle(userId, now);
     }
 
-    public PomodoroState start(String userId) {
+    // focusMinutes and breakMinutes are the student's choice; null means the default length
+    public PomodoroState start(String userId, Integer focusMinutes, Integer breakMinutes) {
+        int focusLength = chosenSeconds(focusMinutes, MAX_FOCUS_MINUTES, focusSeconds, "Focus time");
+        int breakLength = chosenSeconds(breakMinutes, MAX_BREAK_MINUTES, breakSeconds, "Break time");
         if (current(userId).phase() == Phase.FOCUS) {
             throw focusAlreadyRunning();
         }
         Instant now = clock.instant();
-        PomodoroSession session = new PomodoroSession(userId, focusSeconds, now);
+        PomodoroSession session = new PomodoroSession(userId, focusLength, breakLength, now);
         try {
             session = sessionRepository.insert(session);
         } catch (DuplicateKeyException ex) {
@@ -119,9 +125,10 @@ public class PomodoroService {
                 .filter(last -> last.getStatus() == PomodoroStatus.COMPLETED && !last.isBreakSkipped())
                 .filter(last -> last.getCompletedAt() != null)
                 .map(last -> {
-                    long breakLeft = breakSeconds * 1000L - Duration.between(last.getCompletedAt(), now).toMillis();
+                    int breakLength = last.getBreakSeconds() > 0 ? last.getBreakSeconds() : breakSeconds;
+                    long breakLeft = breakLength * 1000L - Duration.between(last.getCompletedAt(), now).toMillis();
                     return breakLeft > 0
-                            ? new PomodoroState(Phase.BREAK, last.getId(), toSeconds(breakLeft), breakSeconds, false)
+                            ? new PomodoroState(Phase.BREAK, last.getId(), toSeconds(breakLeft), breakLength, false)
                             : null;
                 })
                 .orElseGet(() -> new PomodoroState(Phase.IDLE, null, focusSeconds, focusSeconds, false));
@@ -138,6 +145,16 @@ public class PomodoroService {
         return sessionRepository.findById(sessionId)
                 .filter(session -> userId.equals(session.getUserId()))
                 .orElseThrow(() -> ApiException.notFound("Focus session not found"));
+    }
+
+    private static int chosenSeconds(Integer minutes, int maxMinutes, int defaultSeconds, String label) {
+        if (minutes == null) {
+            return defaultSeconds;
+        }
+        if (minutes < 1 || minutes > maxMinutes) {
+            throw ApiException.badRequest(label + " must be between 1 and " + maxMinutes + " minutes");
+        }
+        return minutes * 60;
     }
 
     // Rounds up, so a fresh timer shows 25:00 rather than 24:59

@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 
+import com.AttendanceRegister.sdc.Repository.CalendarEventRepository;
 import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
 import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
@@ -41,13 +42,17 @@ class UserServiceTest {
     @Mock
     private PomodoroSessionRepository pomodoroSessionRepository;
 
+    @Mock
+    private CalendarEventRepository calendarEventRepository;
+
     private final PasswordHasher passwordHasher = new PasswordHasher();
 
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordHasher, resetService, taskRepository, pomodoroSessionRepository);
+        userService = new UserService(userRepository, passwordHasher, resetService, taskRepository,
+                pomodoroSessionRepository, calendarEventRepository);
     }
 
     private static User user(String storedPassword, boolean active, LocalDate paidTill) {
@@ -197,6 +202,7 @@ class UserServiceTest {
         verify(resetService).resetUserData("u1");
         verify(taskRepository).deleteByUserId("u1");
         verify(pomodoroSessionRepository).deleteByUserId("u1");
+        verify(calendarEventRepository).deleteByUserId("u1");
         verify(userRepository).deleteById("u1");
     }
 

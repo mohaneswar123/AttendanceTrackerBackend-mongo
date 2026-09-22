@@ -7,10 +7,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.AttendanceRegister.sdc.dto.PomodoroState;
+import com.AttendanceRegister.sdc.dto.StartPomodoroRequest;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.PomodoroService;
 
@@ -33,10 +35,15 @@ public class PomodoroController {
         return ResponseEntity.ok(pomodoroService.current(studentId(jwt)));
     }
 
-    // ✅ Start a focus session
+    // ✅ Start a focus session, optionally with the student's own focus and break lengths
     @PostMapping("/start")
-    public ResponseEntity<PomodoroState> start(@AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(pomodoroService.start(studentId(jwt)));
+    public ResponseEntity<PomodoroState> start(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody(required = false) StartPomodoroRequest request) {
+
+        Integer focusMinutes = request == null ? null : request.focusMinutes();
+        Integer breakMinutes = request == null ? null : request.breakMinutes();
+        return ResponseEntity.ok(pomodoroService.start(studentId(jwt), focusMinutes, breakMinutes));
     }
 
     @PutMapping("/{sessionId}/pause")
