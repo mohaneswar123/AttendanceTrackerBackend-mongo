@@ -33,23 +33,28 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.controller.AdminController;
 import com.AttendanceRegister.sdc.controller.AttendanceRecordController;
+import com.AttendanceRegister.sdc.controller.PomodoroController;
 import com.AttendanceRegister.sdc.controller.ResetController;
 import com.AttendanceRegister.sdc.controller.SubjectController;
+import com.AttendanceRegister.sdc.controller.TaskController;
 import com.AttendanceRegister.sdc.controller.UserController;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
 import com.AttendanceRegister.sdc.model.User;
 import com.AttendanceRegister.sdc.service.AdminService;
 import com.AttendanceRegister.sdc.service.AttendanceRecordService;
+import com.AttendanceRegister.sdc.service.PomodoroService;
 import com.AttendanceRegister.sdc.service.ResetService;
 import com.AttendanceRegister.sdc.service.SubjectService;
+import com.AttendanceRegister.sdc.service.TaskService;
 import com.AttendanceRegister.sdc.service.UserService;
 import com.jayway.jsonpath.JsonPath;
 
 // Checks who may call which endpoint. Services are mocked, so no database is needed.
 @WebMvcTest(controllers = {
         UserController.class, AdminController.class, SubjectController.class,
-        AttendanceRecordController.class, ResetController.class })
+        AttendanceRecordController.class, ResetController.class,
+        TaskController.class, PomodoroController.class })
 @Import({ SecurityConfig.class, AccessGuard.class, TokenService.class })
 class SecurityRulesTest {
 
@@ -68,6 +73,10 @@ class SecurityRulesTest {
     private ResetService resetService;
     @MockitoBean
     private UserRepository userRepository;
+    @MockitoBean
+    private TaskService taskService;
+    @MockitoBean
+    private PomodoroService pomodoroService;
 
     private static RequestPostProcessor asUser(String userId) {
         return jwt().jwt(token -> token.subject(userId).claim(AccessGuard.ROLE_CLAIM, AccessGuard.ROLE_USER))
@@ -170,6 +179,53 @@ class SecurityRulesTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
                 .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
+    void tasksAndPomodoroNeedAToken() throws Exception {
+        mvc.perform(get("/api/tasks")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/pomodoro/current")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminsCannotUseTasksOrPomodoro() throws Exception {
+        mvc.perform(get("/api/tasks").with(asAdmin())).andExpect(status().isForbidden());
+        mvc.perform(post("/api/pomodoro/start").with(asAdmin())).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void tasksAlwaysBelongToTheSignedInStudent() throws Exception {
+        activeUser("u1");
+        when(taskService.getTasks("u1", "2026-09-22", null)).thenReturn(List.of());
+
+        // A userId in the request is ignored; the student comes from the token
+        mvc.perform(get("/api/tasks").param("from", "2026-09-22").param("userId", "u2").with(asUser("u1")))
+                .andExpect(status().isOk());
+        verify(taskService).getTasks("u1", "2026-09-22", null);
+    }
+
+    @Test
+    void anotherStudentsTaskOrSessionIsNotFound() throws Exception {
+        activeUser("u1");
+        doThrow(ApiException.notFound("Task not found")).when(taskService).deleteTask("u1", "t9");
+        when(pomodoroService.pause("u1", "s9")).thenThrow(ApiException.notFound("Focus session not found"));
+
+        mvc.perform(delete("/api/tasks/t9").with(asUser("u1"))).andExpect(status().isNotFound());
+        mvc.perform(put("/api/pomodoro/s9/pause").with(asUser("u1"))).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void inactiveStudentsCannotUseTasksOrPomodoro() throws Exception {
+        User user = activeUser("u1");
+        doThrow(new ApiException(HttpStatus.FORBIDDEN, "SUBSCRIPTION_INACTIVE", "Your subscription is not active."))
+                .when(userService).requireActiveSubscription(user);
+
+        mvc.perform(get("/api/tasks").with(asUser("u1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"));
+        mvc.perform(get("/api/pomodoro/current").with(asUser("u1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"));
     }
 
     @Test

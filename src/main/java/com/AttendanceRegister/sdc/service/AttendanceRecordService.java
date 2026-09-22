@@ -1,7 +1,5 @@
 package com.AttendanceRegister.sdc.service;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Set;
 
@@ -11,6 +9,7 @@ import com.AttendanceRegister.sdc.Repository.AttendanceRecordRepository;
 import com.AttendanceRegister.sdc.Repository.SubjectRepository;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
+import com.AttendanceRegister.sdc.util.Dates;
 
 @Service
 public class AttendanceRecordService {
@@ -90,11 +89,7 @@ public class AttendanceRecordService {
     }
 
     private static void validateDate(String date) {
-        try {
-            LocalDate.parse(date);
-        } catch (DateTimeParseException | NullPointerException ex) {
-            throw ApiException.badRequest("Date must be in YYYY-MM-DD format");
-        }
+        Dates.parseIsoDate(date, "Date");
     }
 
     private static void validateHours(int hours) {
