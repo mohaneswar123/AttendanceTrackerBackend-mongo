@@ -1,10 +1,20 @@
 package com.AttendanceRegister.sdc.dto;
 
-// Body of POST /api/users/login and POST /api/admin/login
-public class LoginRequest {
+// Body of POST /api/users/register. Only these fields are accepted, so a client
+// cannot set its own id, active flag or paidTill date.
+public class RegisterRequest {
 
+    private String username;
     private String email;
     private String password;
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
     public String getEmail() {
         return email;

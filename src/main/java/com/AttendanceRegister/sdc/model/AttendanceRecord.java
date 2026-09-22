@@ -9,11 +9,13 @@ public class AttendanceRecord {
     @Id
     private String id;
 
+    // "Present", "Absent" or "No Class"
     private String status;
 
+    // "YYYY-MM-DD"
     private String date;
 
-    // ✅ New field to track multiple classes per day
+    // Length of the class in hours (1-3); reports weight attendance by it
     private int classNumber;
 
     // Reference IDs instead of JPA relations
