@@ -21,6 +21,9 @@ import org.springframework.http.HttpStatus;
 import com.AttendanceRegister.sdc.Repository.CalendarEventRepository;
 import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
 import com.AttendanceRegister.sdc.Repository.TaskRepository;
+import com.AttendanceRegister.sdc.Repository.TimetableActivityRepository;
+import com.AttendanceRegister.sdc.Repository.TimetableModeRepository;
+import com.AttendanceRegister.sdc.Repository.TimetablePreferenceRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -45,6 +48,15 @@ class UserServiceTest {
     @Mock
     private CalendarEventRepository calendarEventRepository;
 
+    @Mock
+    private TimetableModeRepository timetableModeRepository;
+
+    @Mock
+    private TimetableActivityRepository timetableActivityRepository;
+
+    @Mock
+    private TimetablePreferenceRepository timetablePreferenceRepository;
+
     private final PasswordHasher passwordHasher = new PasswordHasher();
 
     private UserService userService;
@@ -52,7 +64,8 @@ class UserServiceTest {
     @BeforeEach
     void setUp() {
         userService = new UserService(userRepository, passwordHasher, resetService, taskRepository,
-                pomodoroSessionRepository, calendarEventRepository);
+                pomodoroSessionRepository, calendarEventRepository, timetableModeRepository,
+                timetableActivityRepository, timetablePreferenceRepository);
     }
 
     private static User user(String storedPassword, boolean active, LocalDate paidTill) {
@@ -203,6 +216,9 @@ class UserServiceTest {
         verify(taskRepository).deleteByUserId("u1");
         verify(pomodoroSessionRepository).deleteByUserId("u1");
         verify(calendarEventRepository).deleteByUserId("u1");
+        verify(timetableActivityRepository).deleteByUserId("u1");
+        verify(timetableModeRepository).deleteByUserId("u1");
+        verify(timetablePreferenceRepository).deleteByUserId("u1");
         verify(userRepository).deleteById("u1");
     }
 

@@ -9,6 +9,9 @@ import org.springframework.stereotype.Service;
 import com.AttendanceRegister.sdc.Repository.CalendarEventRepository;
 import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
 import com.AttendanceRegister.sdc.Repository.TaskRepository;
+import com.AttendanceRegister.sdc.Repository.TimetableActivityRepository;
+import com.AttendanceRegister.sdc.Repository.TimetableModeRepository;
+import com.AttendanceRegister.sdc.Repository.TimetablePreferenceRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -24,16 +27,25 @@ public class UserService {
     private final TaskRepository taskRepository;
     private final PomodoroSessionRepository pomodoroSessionRepository;
     private final CalendarEventRepository calendarEventRepository;
+    private final TimetableModeRepository timetableModeRepository;
+    private final TimetableActivityRepository timetableActivityRepository;
+    private final TimetablePreferenceRepository timetablePreferenceRepository;
 
     public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService,
                        TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository,
-                       CalendarEventRepository calendarEventRepository) {
+                       CalendarEventRepository calendarEventRepository,
+                       TimetableModeRepository timetableModeRepository,
+                       TimetableActivityRepository timetableActivityRepository,
+                       TimetablePreferenceRepository timetablePreferenceRepository) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.resetService = resetService;
         this.taskRepository = taskRepository;
         this.pomodoroSessionRepository = pomodoroSessionRepository;
         this.calendarEventRepository = calendarEventRepository;
+        this.timetableModeRepository = timetableModeRepository;
+        this.timetableActivityRepository = timetableActivityRepository;
+        this.timetablePreferenceRepository = timetablePreferenceRepository;
     }
 
     public User validateLogin(String email, String rawPassword) {
@@ -105,7 +117,8 @@ public class UserService {
         return userRepository.findAll();
     }
 
-    // Deletes the user together with their subjects, attendance, tasks, focus sessions and calendar
+    // Deletes the user together with everything of theirs: subjects, attendance, tasks,
+    // focus sessions, calendar and timetable
     public void deleteUser(String id) {
         if (!userRepository.existsById(id)) {
             throw ApiException.notFound("User not found with ID: " + id);
@@ -114,6 +127,9 @@ public class UserService {
         taskRepository.deleteByUserId(id);
         pomodoroSessionRepository.deleteByUserId(id);
         calendarEventRepository.deleteByUserId(id);
+        timetableActivityRepository.deleteByUserId(id);
+        timetableModeRepository.deleteByUserId(id);
+        timetablePreferenceRepository.deleteByUserId(id);
         userRepository.deleteById(id);
     }
 

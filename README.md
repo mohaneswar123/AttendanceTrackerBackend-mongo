@@ -88,6 +88,28 @@ Student-only, like Tasks and Pomodoro, and separate from both.
 - All-day entries have no times, so they stay on the same date everywhere.
 - Entries can't run past midnight.
 
+### Timetable
+
+Reusable weekly routines grouped into modes (College, Home, Exam Prep …). Student-only, like Tasks, Calendar and Pomodoro.
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/timetable/modes` | The student's modes in order, each with its activity count and whether it's active |
+| `POST /api/timetable/modes` `{name, icon, color}` | Create a mode. `color` is VIOLET, CYAN, EMERALD, AMBER, ROSE or SLATE. The student's first mode becomes active. |
+| `PUT /api/timetable/modes/{id}` | Rename, or change the icon or colour |
+| `PUT /api/timetable/modes/{id}/activate` | Make this the active mode |
+| `DELETE /api/timetable/modes/{id}` | Delete the mode and its whole week |
+| `GET /api/timetable/modes/{id}/activities` | That mode's week, by day then start time |
+| `POST /api/timetable/modes/{id}/activities` `{dayOfWeek, title, category, startTime, endTime}` | Add an activity. `dayOfWeek` is MONDAY…SUNDAY, times are `HH:mm`, and `category` (CLASS, STUDY, BREAK, MEAL, EXERCISE, SLEEP, TRAVEL, PERSONAL, OTHER) may be null. |
+| `PUT /api/timetable/activities/{id}` | Edit, including moving it to another day |
+| `DELETE /api/timetable/activities/{id}` | Delete |
+| `POST /api/timetable/modes/{id}/copy-day` `{fromDay, toDays}` | Replace each target day with a copy of the source day |
+
+- **Activities can't overlap** within the same mode and day; the answer is 409 `ACTIVITY_OVERLAP` naming the clash. Touching edges are allowed (8:00–9:00 then 9:00–10:00). Editing an activity ignores itself, and the same times are free to reuse on other days and in other modes.
+- Times are stored as minutes from midnight and must end the same day.
+- **The active mode is one field** in the student's single timetable preference document, written by one update, so simultaneous activations can't leave two modes active. A unique index on `userId` keeps that document single.
+- Limits: 20 modes per student, 40 activities per day, names 40 characters, activity titles 100.
+
 ### How the Pomodoro timer works
 
 The timer's state is kept on the server:
