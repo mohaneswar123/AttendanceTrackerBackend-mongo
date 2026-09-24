@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
@@ -65,6 +66,9 @@ class SecurityRulesTest {
 
     @Autowired
     private MockMvc mvc;
+
+    @Value("${app.cors.allowed-origins}")
+    private String configuredOrigins;
 
     @MockitoBean
     private UserService userService;
@@ -287,11 +291,15 @@ class SecurityRulesTest {
 
     @Test
     void corsAllowsOnlyConfiguredOrigins() throws Exception {
+        // Which sites are allowed is deployment configuration, so take one from the
+        // configuration rather than naming a deployment here
+        String allowed = configuredOrigins.split(",")[0].trim();
+
         mvc.perform(options("/api/users/login")
-                        .header("Origin", "https://attendanceinhand.netlify.app")
+                        .header("Origin", allowed)
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Allow-Origin", "https://attendanceinhand.netlify.app"));
+                .andExpect(header().string("Access-Control-Allow-Origin", allowed));
 
         mvc.perform(options("/api/users/login")
                         .header("Origin", "https://evil.example")
