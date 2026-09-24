@@ -10,6 +10,8 @@ REST API for the Attendance In Hand app, built with Spring Boot 3.5, Java 17 and
 
 The API listens on http://localhost:8080. Run the tests with `./mvnw test`. They don't need a database.
 
+**[`docs/`](docs/README.md) has a file per feature** — accounts, attendance, tasks, pomodoro, calendar, timetable — covering the documents each stores, its endpoints and the rules behind them. This README is the short version.
+
 ## Configuration
 
 | Environment variable | Default | Purpose |
