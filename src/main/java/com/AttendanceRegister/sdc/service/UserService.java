@@ -146,19 +146,40 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    /** Access for `days` from today, whatever the account had before */
     public User activateUser(String id, int days) {
+        return grantAccess(id, days, false);
+    }
+
+    /**
+     * Adds `days` to what the account already has. Renewing early therefore keeps the
+     * days still left instead of throwing them away; an account whose date has passed
+     * (or that never had one) is counted from today.
+     */
+    public User extendUser(String id, int days) {
+        return grantAccess(id, days, true);
+    }
+
+    private User grantAccess(String id, int days, boolean addToExisting) {
         if (days < 0) {
             throw ApiException.badRequest("Days must be 0 or more");
         }
         User user = getUserById(id);
+        LocalDate today = LocalDate.now();
+        LocalDate from = today;
+        if (addToExisting && user.getPaidTill() != null && user.getPaidTill().isAfter(today)) {
+            from = user.getPaidTill();
+        }
         user.setActive(true);
-        user.setPaidTill(LocalDate.now().plusDays(days));
+        user.setPaidTill(from.plusDays(days));
         return userRepository.save(user);
     }
 
+    /** Withdraws access, and clears the paid date so the account cannot look paid-up while off */
     public User deactivateUser(String id) {
         User user = getUserById(id);
         user.setActive(false);
+        user.setPaidTill(null);
         return userRepository.save(user);
     }
 

@@ -19,9 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 import com.AttendanceRegister.sdc.dto.AuthResponse;
 import com.AttendanceRegister.sdc.dto.LoginRequest;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
+import com.AttendanceRegister.sdc.model.AdminAction;
+import com.AttendanceRegister.sdc.model.AdminActionType;
 import com.AttendanceRegister.sdc.model.User;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.security.TokenService;
+import com.AttendanceRegister.sdc.service.AdminAuditService;
 import com.AttendanceRegister.sdc.service.UserService;
 
 @RestController
@@ -31,11 +34,14 @@ public class UserController {
     private final UserService userService;
     private final TokenService tokenService;
     private final AccessGuard accessGuard;
+    private final AdminAuditService auditService;
 
-    public UserController(UserService userService, TokenService tokenService, AccessGuard accessGuard) {
+    public UserController(UserService userService, TokenService tokenService, AccessGuard accessGuard,
+            AdminAuditService auditService) {
         this.userService = userService;
         this.tokenService = tokenService;
         this.accessGuard = accessGuard;
+        this.auditService = auditService;
     }
 
     // ✅ Register new user (public)
@@ -74,8 +80,12 @@ public class UserController {
 
     // ✅ ADMIN: Delete user with all their subjects and attendance
     @DeleteMapping("/{userId}")
-    public ResponseEntity<Void> deleteUser(@PathVariable String userId) {
+    public ResponseEntity<Void> deleteUser(@AuthenticationPrincipal Jwt jwt, @PathVariable String userId) {
+        // Read the account first: once it is gone there is nothing left to name in the log
+        User target = userService.getUserById(userId);
         userService.deleteUser(userId);
+        auditService.record(accessGuard.adminEmail(jwt), AdminActionType.DELETE, target,
+                "Account and all its data removed");
         return ResponseEntity.noContent().build();
     }
 
@@ -101,25 +111,58 @@ public class UserController {
         return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
     }
 
-    // ✅ ADMIN: Activate user for X days
+    // ✅ ADMIN: Activate user for X days, counted from today
     @PutMapping("/admin/activate/{userId}")
-    public ResponseEntity<User> activateUser(@PathVariable String userId, @RequestParam int days) {
-        return ResponseEntity.ok(userService.activateUser(userId, days));
+    public ResponseEntity<User> activateUser(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable String userId, @RequestParam int days) {
+
+        User user = userService.activateUser(userId, days);
+        auditService.record(accessGuard.adminEmail(jwt), AdminActionType.ACTIVATE, user,
+                AdminAuditService.accessDetail(days, user.getPaidTill()));
+        return ResponseEntity.ok(user);
+    }
+
+    // ✅ ADMIN: Add X days on top of what the account already has
+    @PutMapping("/admin/extend/{userId}")
+    public ResponseEntity<User> extendUser(
+            @AuthenticationPrincipal Jwt jwt, @PathVariable String userId, @RequestParam int days) {
+
+        User user = userService.extendUser(userId, days);
+        auditService.record(accessGuard.adminEmail(jwt), AdminActionType.EXTEND, user,
+                AdminAuditService.accessDetail(days, user.getPaidTill()));
+        return ResponseEntity.ok(user);
     }
 
     // ✅ ADMIN: Deactivate user
     @PutMapping("/admin/deactivate/{userId}")
-    public ResponseEntity<User> deactivateUser(@PathVariable String userId) {
-        return ResponseEntity.ok(userService.deactivateUser(userId));
+    public ResponseEntity<User> deactivateUser(@AuthenticationPrincipal Jwt jwt, @PathVariable String userId) {
+        User user = userService.deactivateUser(userId);
+        auditService.record(accessGuard.adminEmail(jwt), AdminActionType.DEACTIVATE, user,
+                "Access withdrawn");
+        return ResponseEntity.ok(user);
     }
 
     // ✅ ADMIN: Set a new password for a user who has forgotten theirs
     @PutMapping("/admin/{userId}/password")
     public ResponseEntity<Map<String, String>> setPassword(
+            @AuthenticationPrincipal Jwt jwt,
             @PathVariable String userId,
             @RequestBody Map<String, String> req) {
 
         userService.setPassword(userId, req.get("password"));
+        auditService.record(accessGuard.adminEmail(jwt), AdminActionType.SET_PASSWORD,
+                userService.getUserById(userId), "A new password was set");
         return ResponseEntity.ok(Map.of("message", "Password updated"));
+    }
+
+    // ✅ ADMIN: What admins have done, newest first
+    @GetMapping("/admin/activity")
+    public ResponseEntity<List<AdminAction>> activity(
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(required = false) String userId) {
+
+        return ResponseEntity.ok(userId == null
+                ? auditService.recent(limit)
+                : auditService.forUser(userId, limit));
     }
 }

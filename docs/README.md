@@ -50,6 +50,7 @@ file:
 | 409 | `FOCUS_ALREADY_RUNNING` | A focus session is already running |
 | 409 | `ACTIVITY_OVERLAP` | Two timetable activities would overlap |
 | 400 | `INVALID_POSITION` | A task move named neighbours that don't fit |
+| 429 | `TOO_MANY_ATTEMPTS` | Too many failed admin sign-ins; wait and try again |
 
 Anything else is shown with its own message and needs no special handling.
 

@@ -232,4 +232,72 @@ class UserServiceTest {
                 .isInstanceOfSatisfying(ApiException.class,
                         ex -> assertThat(ex.getCode()).isEqualTo("EMAIL_EXISTS"));
     }
+
+    @Test
+    void activatingCountsFromTodayWhateverTheAccountHad() {
+        User stored = user("hash", false, LocalDate.now().plusDays(100));
+        when(userRepository.findById("u1")).thenReturn(Optional.of(stored));
+        when(userRepository.save(stored)).thenReturn(stored);
+
+        User result = userService.activateUser("u1", 30);
+
+        assertThat(result.isActive()).isTrue();
+        assertThat(result.getPaidTill()).isEqualTo(LocalDate.now().plusDays(30));
+    }
+
+    @Test
+    void extendingAddsToTheDaysStillLeft() {
+        User stored = user("hash", true, LocalDate.now().plusDays(10));
+        when(userRepository.findById("u1")).thenReturn(Optional.of(stored));
+        when(userRepository.save(stored)).thenReturn(stored);
+
+        User result = userService.extendUser("u1", 30);
+
+        // Renewing early keeps the ten days that were left
+        assertThat(result.getPaidTill()).isEqualTo(LocalDate.now().plusDays(40));
+    }
+
+    @Test
+    void extendingAnExpiredAccountCountsFromToday() {
+        User stored = user("hash", false, LocalDate.now().minusDays(5));
+        when(userRepository.findById("u1")).thenReturn(Optional.of(stored));
+        when(userRepository.save(stored)).thenReturn(stored);
+
+        User result = userService.extendUser("u1", 30);
+
+        assertThat(result.isActive()).isTrue();
+        assertThat(result.getPaidTill()).isEqualTo(LocalDate.now().plusDays(30));
+    }
+
+    @Test
+    void extendingAnAccountThatNeverPaidCountsFromToday() {
+        User stored = user("hash", false, null);
+        when(userRepository.findById("u1")).thenReturn(Optional.of(stored));
+        when(userRepository.save(stored)).thenReturn(stored);
+
+        assertThat(userService.extendUser("u1", 7).getPaidTill()).isEqualTo(LocalDate.now().plusDays(7));
+    }
+
+    @Test
+    void deactivatingClearsThePaidDate() {
+        User stored = user("hash", true, LocalDate.now().plusDays(10));
+        when(userRepository.findById("u1")).thenReturn(Optional.of(stored));
+        when(userRepository.save(stored)).thenReturn(stored);
+
+        User result = userService.deactivateUser("u1");
+
+        // Or the account would read as paid up while it is switched off
+        assertThat(result.isActive()).isFalse();
+        assertThat(result.getPaidTill()).isNull();
+    }
+
+    @Test
+    void negativeDaysAreRefused() {
+        assertThatThrownBy(() -> userService.activateUser("u1", -1))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThatThrownBy(() -> userService.extendUser("u1", -1))
+                .isInstanceOfSatisfying(ApiException.class,
+                        ex -> assertThat(ex.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
 }
