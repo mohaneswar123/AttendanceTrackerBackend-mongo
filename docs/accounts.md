@@ -14,7 +14,7 @@ admin can do. Read [README.md](README.md) first for the rules every feature shar
 | `email` | Unique. This is what you log in with. |
 | `password` | A BCrypt hash. See *Passwords* below. |
 | `active` | Whether the subscription is running |
-| `subscriptionEnd` | When it lapses |
+| `paidTill` | The date access is allowed until |
 
 **`admin_table`** (`model/Admin.java`) holds `id`, `email`, `password`. Admins are created
 directly in the database; there is no endpoint for it.
