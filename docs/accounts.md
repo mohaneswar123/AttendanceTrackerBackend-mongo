@@ -65,7 +65,7 @@ Both can be deleted once no plain-text password remains.
 
 `AccessGuard.requireActiveStudent` refuses a student whose subscription has lapsed with 403
 and either `SUBSCRIPTION_INACTIVE` (never activated, or deactivated) or
-`SUBSCRIPTION_EXPIRED` (`subscriptionEnd` has passed). The frontend sends those students to
+`SUBSCRIPTION_EXPIRED` (`paidTill` has passed). The frontend sends those students to
 `/inactive`.
 
 This gate covers Tasks, Pomodoro, Calendar and Timetable. Reading and writing attendance is
