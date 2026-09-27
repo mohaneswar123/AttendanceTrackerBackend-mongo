@@ -51,7 +51,8 @@ Failed requests return `{ "code": ..., "message": ... }` with a matching HTTP st
 | `GET /api/users/me`, `POST /api/users/change-password` | Signed-in student |
 | `GET /api/users/{id}`, `PUT /api/users/{id}/email` | That student or an admin |
 | `GET /api/users`, `DELETE /api/users/{id}` (with the user's data) | Admin |
-| `PUT /api/users/admin/activate/{id}?days=N`, `PUT /api/users/admin/deactivate/{id}`, `PUT /api/users/admin/{id}/password` | Admin |
+| `PUT /api/users/admin/activate/{id}?days=N` (from today), `PUT /api/users/admin/extend/{id}?days=N` (adds to what's left), `PUT /api/users/admin/deactivate/{id}`, `PUT /api/users/admin/{id}/password` | Admin |
+| `GET /api/users/admin/activity?limit=&userId=` — what admins have done, newest first | Admin |
 | `POST /api/subjects/add?userId&name`, `GET /api/subjects/user/{userId}`, `DELETE /api/subjects/{subjectId}/user/{userId}` | That student or an admin |
 | `POST /api/attendance/add?userId&subjectId&status&date&classNumber`, `GET /api/attendance/user/{userId}` | That student or an admin |
 | `PUT /api/attendance/{id}`, `DELETE /api/attendance/{id}` | The record's owner or an admin |

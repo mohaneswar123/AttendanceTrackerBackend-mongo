@@ -31,6 +31,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import com.AttendanceRegister.sdc.Repository.AdminRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.controller.AdminController;
 import com.AttendanceRegister.sdc.controller.AttendanceRecordController;
@@ -44,6 +45,7 @@ import com.AttendanceRegister.sdc.controller.UserController;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
 import com.AttendanceRegister.sdc.model.User;
+import com.AttendanceRegister.sdc.service.AdminAuditService;
 import com.AttendanceRegister.sdc.service.AdminService;
 import com.AttendanceRegister.sdc.service.AttendanceRecordService;
 import com.AttendanceRegister.sdc.service.CalendarEventService;
@@ -90,6 +92,10 @@ class SecurityRulesTest {
     private CalendarEventService calendarEventService;
     @MockitoBean
     private TimetableService timetableService;
+    @MockitoBean
+    private AdminAuditService auditService;
+    @MockitoBean
+    private AdminRepository adminRepository;
 
     private static RequestPostProcessor asUser(String userId) {
         return jwt().jwt(token -> token.subject(userId).claim(AccessGuard.ROLE_CLAIM, AccessGuard.ROLE_USER))

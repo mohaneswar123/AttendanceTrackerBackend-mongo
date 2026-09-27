@@ -4,8 +4,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 
+import com.AttendanceRegister.sdc.Repository.AdminRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.exception.ApiException;
+import com.AttendanceRegister.sdc.model.Admin;
 import com.AttendanceRegister.sdc.model.User;
 import com.AttendanceRegister.sdc.service.UserService;
 
@@ -20,15 +22,27 @@ public class AccessGuard {
     public static final String ROLE_ADMIN = "ADMIN";
 
     private final UserRepository userRepository;
+    private final AdminRepository adminRepository;
     private final UserService userService;
 
-    public AccessGuard(UserRepository userRepository, UserService userService) {
+    public AccessGuard(UserRepository userRepository, AdminRepository adminRepository, UserService userService) {
         this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
         this.userService = userService;
     }
 
     public boolean isAdmin(Jwt jwt) {
         return ROLE_ADMIN.equals(jwt.getClaimAsString(ROLE_CLAIM));
+    }
+
+    /**
+     * Who to name in the audit log. The token carries the admin's id, so the email is
+     * looked up; if that row has gone, the id is recorded rather than nothing.
+     */
+    public String adminEmail(Jwt jwt) {
+        return adminRepository.findById(jwt.getSubject())
+                .map(Admin::getEmail)
+                .orElseGet(jwt::getSubject);
     }
 
     // The signed-in user's account. A token for a deleted account counts as signed out.

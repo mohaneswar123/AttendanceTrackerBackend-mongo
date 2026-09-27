@@ -32,9 +32,41 @@ directly in the database; there is no endpoint for it.
 | `PUT /api/users/{id}/email` `{email}` | That student, or an admin | 409 `EMAIL_EXISTS` |
 | `GET /api/users` | Admin | Every account |
 | `DELETE /api/users/{id}` | Admin | Deletes the account **and everything it owns** (see below) |
-| `PUT /api/users/admin/activate/{id}?days=N` | Admin | Starts or extends the subscription by N days |
-| `PUT /api/users/admin/deactivate/{id}` | Admin | Ends it now |
+| `PUT /api/users/admin/activate/{id}?days=N` | Admin | Access for N days **counted from today**, whatever the account had before |
+| `PUT /api/users/admin/extend/{id}?days=N` | Admin | **Adds** N days to what is left (see below) |
+| `PUT /api/users/admin/deactivate/{id}` | Admin | Ends access now, and clears `paidTill` |
 | `PUT /api/users/admin/{id}/password` `{password}` | Admin | Sets a new password for a student who has forgotten theirs |
+| `GET /api/users/admin/activity?limit=&userId=` | Admin | The audit log, newest first (see below) |
+
+## Activate or extend
+
+Both grant access; they differ in where the days are counted from.
+
+- **Activate** sets `paidTill` to today + N. Use it to start someone, or to correct a
+  date that is wrong.
+- **Extend** adds N days to `paidTill` when that date is still in the future, and counts
+  from today when it has passed or was never set. Renewing a week early therefore keeps
+  the week that was left instead of throwing it away.
+
+Deactivating clears `paidTill` as well as the flag, so a switched-off account can never
+read as paid up.
+
+## The audit log
+
+Every admin action on an account is recorded in `admin_action_table`
+(`model/AdminAction.java`) once the change has succeeded: who did it, what they did, to
+whom, and a line of detail such as `30 days, paid till 30 Oct 2026`.
+
+Two decisions worth knowing:
+
+- **The target's email is stored as text**, not looked up through `targetUserId`. The
+  account may be deleted, and naming who it was is exactly what the log is for.
+- **Entries are never edited or removed**, including when the account is deleted. There is
+  no endpoint that writes to the log directly; it is only written as a side effect of a
+  successful action.
+
+`GET /api/users/admin/activity` returns the most recent entries, at most 200. Pass
+`userId` for one account's history.
 
 ## Tokens
 
@@ -60,6 +92,20 @@ those working:
   meantime.
 
 Both can be deleted once no plain-text password remains.
+
+## Guessing at the admin password
+
+There is one admin account and one password, and nothing else between a guess and every
+student's data, so `POST /api/admin/login` counts failures per email
+(`security/LoginThrottle.java`). After 5 wrong tries it answers 429 `TOO_MANY_ATTEMPTS`
+for 15 minutes and says how long is left. A correct password clears the count, so
+mistyping twice and then getting it right is never held up, and one account's failures
+never lock another out.
+
+**The counts are in memory.** That needs no extra service, and the worst a restart can do
+is forgive some failed attempts — but it also means the limit is per instance. If the API
+is ever run on more than one, this has to move to shared storage for the limit to mean
+anything. Student login is not throttled.
 
 ## Subscriptions
 
