@@ -14,8 +14,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.AttendanceRegister.sdc.model.Subject;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.SubjectService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 
 @RestController
 @RequestMapping("/api/subjects")
@@ -23,10 +26,12 @@ public class SubjectController {
 
     private final SubjectService subjectService;
     private final AccessGuard accessGuard;
+    private final UserAuditService audit;
 
-    public SubjectController(SubjectService subjectService, AccessGuard accessGuard) {
+    public SubjectController(SubjectService subjectService, AccessGuard accessGuard, UserAuditService audit) {
         this.subjectService = subjectService;
         this.accessGuard = accessGuard;
+        this.audit = audit;
     }
 
     // ✅ Add a new subject for a user
@@ -37,7 +42,9 @@ public class SubjectController {
             @RequestParam String name) {
 
         accessGuard.requireActiveSelfOrAdmin(jwt, userId);
-        return ResponseEntity.ok(subjectService.addSubject(userId, name));
+        Subject subject = subjectService.addSubject(userId, name);
+        audit.record(userId, UserActionFeature.SUBJECT, UserActionType.CREATE, accessGuard.isAdmin(jwt));
+        return ResponseEntity.ok(subject);
     }
 
     // ✅ Get all subjects for a specific user
@@ -59,6 +66,7 @@ public class SubjectController {
 
         accessGuard.requireActiveSelfOrAdmin(jwt, userId);
         subjectService.deleteSubjectForUser(subjectId, userId);
+        audit.record(userId, UserActionFeature.SUBJECT, UserActionType.DELETE, accessGuard.isAdmin(jwt));
         return ResponseEntity.noContent().build();
     }
 

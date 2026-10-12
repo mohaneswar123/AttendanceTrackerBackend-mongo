@@ -17,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,7 @@ import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
 import com.AttendanceRegister.sdc.model.User;
 import com.AttendanceRegister.sdc.service.AdminAuditService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 import com.AttendanceRegister.sdc.service.AdminService;
 import com.AttendanceRegister.sdc.service.AttendanceRecordService;
 import com.AttendanceRegister.sdc.service.CalendarEventService;
@@ -95,6 +97,8 @@ class SecurityRulesTest {
     @MockitoBean
     private AdminAuditService auditService;
     @MockitoBean
+    private UserAuditService userAuditService;
+    @MockitoBean
     private AdminRepository adminRepository;
 
     private static RequestPostProcessor asUser(String userId) {
@@ -128,6 +132,24 @@ class SecurityRulesTest {
         mvc.perform(put("/api/users/admin/activate/u1").param("days", "30").with(asUser("u1")))
                 .andExpect(status().isForbidden());
         mvc.perform(delete("/api/users/u2").with(asUser("u1"))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void aStudentCannotReadAnyonesActivityLog() throws Exception {
+        // Not even their own: the log is there for an admin to look at
+        mvc.perform(get("/api/users/admin/user-activity").param("userId", "u1").with(asUser("u1")))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/users/admin/user-activity").param("userId", "u1"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void anAdminCanReadAStudentsActivityLog() throws Exception {
+        when(userAuditService.counts("u1")).thenReturn(Map.of());
+        when(userAuditService.forUser("u1", 50)).thenReturn(List.of());
+
+        mvc.perform(get("/api/users/admin/user-activity").param("userId", "u1").with(asAdmin()))
+                .andExpect(status().isOk());
     }
 
     @Test

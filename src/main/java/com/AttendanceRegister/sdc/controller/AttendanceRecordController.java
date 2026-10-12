@@ -8,8 +8,11 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import com.AttendanceRegister.sdc.model.AttendanceRecord;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.AttendanceRecordService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 
 @RestController
 @RequestMapping("/api/attendance")
@@ -17,10 +20,13 @@ public class AttendanceRecordController {
 
     private final AttendanceRecordService attendanceService;
     private final AccessGuard accessGuard;
+    private final UserAuditService audit;
 
-    public AttendanceRecordController(AttendanceRecordService attendanceService, AccessGuard accessGuard) {
+    public AttendanceRecordController(AttendanceRecordService attendanceService, AccessGuard accessGuard,
+            UserAuditService audit) {
         this.attendanceService = attendanceService;
         this.accessGuard = accessGuard;
+        this.audit = audit;
     }
 
     // ✅ Add a new attendance record; classNumber is the class length in hours
@@ -35,6 +41,7 @@ public class AttendanceRecordController {
 
         accessGuard.requireActiveSelfOrAdmin(jwt, userId);
         AttendanceRecord record = attendanceService.addRecord(userId, subjectId, status, date, classNumber);
+        audit.record(userId, UserActionFeature.ATTENDANCE, UserActionType.CREATE, accessGuard.isAdmin(jwt));
         return ResponseEntity.ok(record);
     }
 
@@ -57,7 +64,9 @@ public class AttendanceRecordController {
 
         AttendanceRecord existing = attendanceService.getRecord(id);
         accessGuard.requireActiveSelfOrAdmin(jwt, existing.getUserId());
-        return ResponseEntity.ok(attendanceService.updateRecord(existing, updatedRecord));
+        AttendanceRecord saved = attendanceService.updateRecord(existing, updatedRecord);
+        audit.record(existing.getUserId(), UserActionFeature.ATTENDANCE, UserActionType.UPDATE, accessGuard.isAdmin(jwt));
+        return ResponseEntity.ok(saved);
     }
 
     // ✅ Delete a specific attendance record by ID
@@ -66,6 +75,7 @@ public class AttendanceRecordController {
         AttendanceRecord existing = attendanceService.getRecord(id);
         accessGuard.requireActiveSelfOrAdmin(jwt, existing.getUserId());
         attendanceService.deleteRecord(existing);
+        audit.record(existing.getUserId(), UserActionFeature.ATTENDANCE, UserActionType.DELETE, accessGuard.isAdmin(jwt));
         return ResponseEntity.noContent().build();
     }
 }

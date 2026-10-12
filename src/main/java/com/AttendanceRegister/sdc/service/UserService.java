@@ -12,6 +12,7 @@ import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableActivityRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableModeRepository;
 import com.AttendanceRegister.sdc.Repository.TimetablePreferenceRepository;
+import com.AttendanceRegister.sdc.Repository.UserActionRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -30,13 +31,15 @@ public class UserService {
     private final TimetableModeRepository timetableModeRepository;
     private final TimetableActivityRepository timetableActivityRepository;
     private final TimetablePreferenceRepository timetablePreferenceRepository;
+    private final UserActionRepository userActionRepository;
 
     public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService,
                        TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository,
                        CalendarEventRepository calendarEventRepository,
                        TimetableModeRepository timetableModeRepository,
                        TimetableActivityRepository timetableActivityRepository,
-                       TimetablePreferenceRepository timetablePreferenceRepository) {
+                       TimetablePreferenceRepository timetablePreferenceRepository,
+                       UserActionRepository userActionRepository) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.resetService = resetService;
@@ -46,6 +49,7 @@ public class UserService {
         this.timetableModeRepository = timetableModeRepository;
         this.timetableActivityRepository = timetableActivityRepository;
         this.timetablePreferenceRepository = timetablePreferenceRepository;
+        this.userActionRepository = userActionRepository;
     }
 
     public User validateLogin(String email, String rawPassword) {
@@ -130,6 +134,9 @@ public class UserService {
         timetableActivityRepository.deleteByUserId(id);
         timetableModeRepository.deleteByUserId(id);
         timetablePreferenceRepository.deleteByUserId(id);
+        // Their activity log goes too: it is about this account's own use of the app,
+        // unlike the admin log, which has to outlive the account it describes
+        userActionRepository.deleteByUserId(id);
         userRepository.deleteById(id);
     }
 
