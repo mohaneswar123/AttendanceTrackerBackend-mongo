@@ -16,6 +16,8 @@ import com.AttendanceRegister.sdc.dto.PomodoroState.Phase;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.PomodoroSession;
 import com.AttendanceRegister.sdc.model.PomodoroStatus;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 
 // The Pomodoro timer: a focus period, then a break timed from when the focus ended.
 // All state is on the server, so the timer survives refresh, navigation and device changes.
@@ -29,18 +31,33 @@ public class PomodoroService {
     static final int MAX_BREAK_MINUTES = 30;
 
     private final PomodoroSessionRepository sessionRepository;
+    private final UserAuditService audit;
     private final Clock clock;
     private final int focusSeconds;
     private final int breakSeconds;
 
     public PomodoroService(PomodoroSessionRepository sessionRepository,
+                           UserAuditService audit,
                            Clock clock,
                            @Value("${app.pomodoro.focus-seconds:1500}") int focusSeconds,
                            @Value("${app.pomodoro.break-seconds:300}") int breakSeconds) {
         this.sessionRepository = sessionRepository;
+        this.audit = audit;
         this.clock = clock;
         this.focusSeconds = focusSeconds;
         this.breakSeconds = breakSeconds;
+    }
+
+    /*
+     * The audit log is written here rather than in the controller, because every one of
+     * these endpoints is safe to repeat: the conditional updates say how many documents
+     * they actually changed, so only a real change is recorded and a retried request
+     * does not add a second line.
+     */
+    private void audited(String userId, UserActionType action, long changed) {
+        if (changed > 0) {
+            audit.record(userId, UserActionFeature.FOCUS, action, false);
+        }
     }
 
     public PomodoroState current(String userId) {
@@ -72,6 +89,7 @@ public class PomodoroService {
             // Another request started one at the same moment; the unique index caught it
             throw focusAlreadyRunning();
         }
+        audit.record(userId, UserActionFeature.FOCUS, UserActionType.CREATE, false);
         return focusState(session, now);
     }
 
@@ -79,7 +97,7 @@ public class PomodoroService {
         PomodoroSession session = getOwnedSession(userId, sessionId);
         Instant now = clock.instant();
         if (session.getStatus() == PomodoroStatus.ACTIVE && !session.isPaused() && session.remainingMillis(now) > 0) {
-            sessionRepository.pauseIfRunning(sessionId, now);
+            audited(userId, UserActionType.UPDATE, sessionRepository.pauseIfRunning(sessionId, now));
         }
         return current(userId);
     }
@@ -88,7 +106,8 @@ public class PomodoroService {
         PomodoroSession session = getOwnedSession(userId, sessionId);
         if (session.getStatus() == PomodoroStatus.ACTIVE && session.isPaused()) {
             long pausedFor = Duration.between(session.getPausedAt(), clock.instant()).toMillis();
-            sessionRepository.resumeIfPaused(sessionId, session.getPausedAt(), Math.max(0, pausedFor));
+            audited(userId, UserActionType.UPDATE,
+                    sessionRepository.resumeIfPaused(sessionId, session.getPausedAt(), Math.max(0, pausedFor)));
         }
         return current(userId);
     }
@@ -96,7 +115,7 @@ public class PomodoroService {
     // The Reset button: the session is dropped without counting
     public PomodoroState stop(String userId, String sessionId) {
         getOwnedSession(userId, sessionId);
-        sessionRepository.interruptIfActive(sessionId);
+        audited(userId, UserActionType.DELETE, sessionRepository.interruptIfActive(sessionId));
         return current(userId);
     }
 
@@ -109,14 +128,15 @@ public class PomodoroService {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "FOCUS_NOT_FINISHED", "The focus time isn't over yet");
             }
             Instant end = session.endsAt();
-            sessionRepository.completeIfActive(sessionId, now.isBefore(end) ? now : end);
+            audited(userId, UserActionType.UPDATE,
+                    sessionRepository.completeIfActive(sessionId, now.isBefore(end) ? now : end));
         }
         return current(userId);
     }
 
     public PomodoroState skipBreak(String userId, String sessionId) {
         getOwnedSession(userId, sessionId);
-        sessionRepository.skipBreakIfCompleted(sessionId);
+        audited(userId, UserActionType.UPDATE, sessionRepository.skipBreakIfCompleted(sessionId));
         return current(userId);
     }
 

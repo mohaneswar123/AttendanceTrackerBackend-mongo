@@ -17,8 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.AttendanceRegister.sdc.dto.CalendarEventRequest;
 import com.AttendanceRegister.sdc.dto.CalendarEventResponse;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.CalendarEventService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 
 // The signed-in student's calendar entries
 @RestController
@@ -27,10 +30,13 @@ public class CalendarEventController {
 
     private final CalendarEventService calendarEventService;
     private final AccessGuard accessGuard;
+    private final UserAuditService audit;
 
-    public CalendarEventController(CalendarEventService calendarEventService, AccessGuard accessGuard) {
+    public CalendarEventController(CalendarEventService calendarEventService, AccessGuard accessGuard,
+            UserAuditService audit) {
         this.calendarEventService = calendarEventService;
         this.accessGuard = accessGuard;
+        this.audit = audit;
     }
 
     // ✅ Entries dated from..to (inclusive) and/or whose title contains q; all optional
@@ -54,7 +60,10 @@ public class CalendarEventController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody CalendarEventRequest request) {
 
-        return ResponseEntity.ok(calendarEventService.createEvent(studentId(jwt), request));
+        String userId = studentId(jwt);
+        CalendarEventResponse event = calendarEventService.createEvent(userId, request);
+        audited(userId, UserActionType.CREATE);
+        return ResponseEntity.ok(event);
     }
 
     @PutMapping("/{eventId}")
@@ -63,16 +72,26 @@ public class CalendarEventController {
             @PathVariable String eventId,
             @RequestBody CalendarEventRequest request) {
 
-        return ResponseEntity.ok(calendarEventService.updateEvent(studentId(jwt), eventId, request));
+        String userId = studentId(jwt);
+        CalendarEventResponse event = calendarEventService.updateEvent(userId, eventId, request);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(event);
     }
 
     @DeleteMapping("/{eventId}")
     public ResponseEntity<Void> deleteEvent(@AuthenticationPrincipal Jwt jwt, @PathVariable String eventId) {
-        calendarEventService.deleteEvent(studentId(jwt), eventId);
+        String userId = studentId(jwt);
+        calendarEventService.deleteEvent(userId, eventId);
+        audited(userId, UserActionType.DELETE);
         return ResponseEntity.noContent().build();
     }
 
     private String studentId(Jwt jwt) {
         return accessGuard.requireActiveStudent(jwt).getId();
+    }
+
+    // Only a student reaches these, so an admin is never the one acting
+    private void audited(String userId, UserActionType action) {
+        audit.record(userId, UserActionFeature.CALENDAR, action, false);
     }
 }

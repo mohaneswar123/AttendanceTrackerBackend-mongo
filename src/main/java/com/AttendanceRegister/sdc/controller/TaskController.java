@@ -18,8 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.AttendanceRegister.sdc.dto.MoveTaskRequest;
 import com.AttendanceRegister.sdc.dto.TaskRequest;
 import com.AttendanceRegister.sdc.model.Task;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.TaskService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 
 // The signed-in student's Kanban tasks
 @RestController
@@ -28,10 +31,17 @@ public class TaskController {
 
     private final TaskService taskService;
     private final AccessGuard accessGuard;
+    private final UserAuditService audit;
 
-    public TaskController(TaskService taskService, AccessGuard accessGuard) {
+    public TaskController(TaskService taskService, AccessGuard accessGuard, UserAuditService audit) {
         this.taskService = taskService;
         this.accessGuard = accessGuard;
+        this.audit = audit;
+    }
+
+    // Only a student reaches these, so an admin is never the one acting
+    private void audited(String userId, UserActionType action) {
+        audit.record(userId, UserActionFeature.TASK, action, false);
     }
 
     // ✅ Tasks dated from..to (inclusive); leave both out for all tasks
@@ -49,7 +59,9 @@ public class TaskController {
     @PostMapping
     public ResponseEntity<Task> createTask(@AuthenticationPrincipal Jwt jwt, @RequestBody TaskRequest request) {
         String userId = accessGuard.requireActiveStudent(jwt).getId();
-        return ResponseEntity.ok(taskService.createTask(userId, request));
+        Task task = taskService.createTask(userId, request);
+        audited(userId, UserActionType.CREATE);
+        return ResponseEntity.ok(task);
     }
 
     // ✅ Edit title, date and priority
@@ -60,7 +72,9 @@ public class TaskController {
             @RequestBody TaskRequest request) {
 
         String userId = accessGuard.requireActiveStudent(jwt).getId();
-        return ResponseEntity.ok(taskService.updateTask(userId, taskId, request));
+        Task task = taskService.updateTask(userId, taskId, request);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(task);
     }
 
     // ✅ Move to a column and/or a new place in it
@@ -71,7 +85,9 @@ public class TaskController {
             @RequestBody MoveTaskRequest request) {
 
         String userId = accessGuard.requireActiveStudent(jwt).getId();
-        return ResponseEntity.ok(taskService.moveTask(userId, taskId, request));
+        Task task = taskService.moveTask(userId, taskId, request);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(task);
     }
 
     // ✅ Delete a task
@@ -79,6 +95,7 @@ public class TaskController {
     public ResponseEntity<Void> deleteTask(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {
         String userId = accessGuard.requireActiveStudent(jwt).getId();
         taskService.deleteTask(userId, taskId);
+        audited(userId, UserActionType.DELETE);
         return ResponseEntity.noContent().build();
     }
 }

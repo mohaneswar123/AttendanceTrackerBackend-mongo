@@ -19,8 +19,11 @@ import com.AttendanceRegister.sdc.dto.TimetableActivityRequest;
 import com.AttendanceRegister.sdc.dto.TimetableActivityResponse;
 import com.AttendanceRegister.sdc.dto.TimetableModeRequest;
 import com.AttendanceRegister.sdc.dto.TimetableModeResponse;
+import com.AttendanceRegister.sdc.model.UserActionFeature;
+import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.TimetableService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 
 // The signed-in student's timetable modes and their weekly activities
 @RestController
@@ -29,10 +32,12 @@ public class TimetableController {
 
     private final TimetableService timetableService;
     private final AccessGuard accessGuard;
+    private final UserAuditService audit;
 
-    public TimetableController(TimetableService timetableService, AccessGuard accessGuard) {
+    public TimetableController(TimetableService timetableService, AccessGuard accessGuard, UserAuditService audit) {
         this.timetableService = timetableService;
         this.accessGuard = accessGuard;
+        this.audit = audit;
     }
 
     // ✅ All of the student's modes, in order, with their activity counts
@@ -47,7 +52,10 @@ public class TimetableController {
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody TimetableModeRequest request) {
 
-        return ResponseEntity.ok(timetableService.createMode(studentId(jwt), request));
+        String userId = studentId(jwt);
+        TimetableModeResponse mode = timetableService.createMode(userId, request);
+        audited(userId, UserActionType.CREATE);
+        return ResponseEntity.ok(mode);
     }
 
     @PutMapping("/modes/{modeId}")
@@ -56,7 +64,10 @@ public class TimetableController {
             @PathVariable String modeId,
             @RequestBody TimetableModeRequest request) {
 
-        return ResponseEntity.ok(timetableService.updateMode(studentId(jwt), modeId, request));
+        String userId = studentId(jwt);
+        TimetableModeResponse mode = timetableService.updateMode(userId, modeId, request);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(mode);
     }
 
     // ✅ Make this the active mode; returns every mode with its new state
@@ -65,7 +76,10 @@ public class TimetableController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable String modeId) {
 
-        return ResponseEntity.ok(timetableService.activateMode(studentId(jwt), modeId));
+        String userId = studentId(jwt);
+        List<TimetableModeResponse> modes = timetableService.activateMode(userId, modeId);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(modes);
     }
 
     // ✅ Delete the mode with its whole week
@@ -74,7 +88,10 @@ public class TimetableController {
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable String modeId) {
 
-        return ResponseEntity.ok(timetableService.deleteMode(studentId(jwt), modeId));
+        String userId = studentId(jwt);
+        List<TimetableModeResponse> modes = timetableService.deleteMode(userId, modeId);
+        audited(userId, UserActionType.DELETE);
+        return ResponseEntity.ok(modes);
     }
 
     // ✅ That mode's week, ordered by day then start time
@@ -92,7 +109,10 @@ public class TimetableController {
             @PathVariable String modeId,
             @RequestBody TimetableActivityRequest request) {
 
-        return ResponseEntity.ok(timetableService.createActivity(studentId(jwt), modeId, request));
+        String userId = studentId(jwt);
+        TimetableActivityResponse activity = timetableService.createActivity(userId, modeId, request);
+        audited(userId, UserActionType.CREATE);
+        return ResponseEntity.ok(activity);
     }
 
     @PutMapping("/activities/{activityId}")
@@ -101,12 +121,17 @@ public class TimetableController {
             @PathVariable String activityId,
             @RequestBody TimetableActivityRequest request) {
 
-        return ResponseEntity.ok(timetableService.updateActivity(studentId(jwt), activityId, request));
+        String userId = studentId(jwt);
+        TimetableActivityResponse activity = timetableService.updateActivity(userId, activityId, request);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(activity);
     }
 
     @DeleteMapping("/activities/{activityId}")
     public ResponseEntity<Void> deleteActivity(@AuthenticationPrincipal Jwt jwt, @PathVariable String activityId) {
-        timetableService.deleteActivity(studentId(jwt), activityId);
+        String userId = studentId(jwt);
+        timetableService.deleteActivity(userId, activityId);
+        audited(userId, UserActionType.DELETE);
         return ResponseEntity.noContent().build();
     }
 
@@ -117,7 +142,16 @@ public class TimetableController {
             @PathVariable String modeId,
             @RequestBody CopyDayRequest request) {
 
-        return ResponseEntity.ok(timetableService.copyDay(studentId(jwt), modeId, request));
+        String userId = studentId(jwt);
+        List<TimetableActivityResponse> activities = timetableService.copyDay(userId, modeId, request);
+        audited(userId, UserActionType.CREATE);
+        return ResponseEntity.ok(activities);
+    }
+
+    // Only a student reaches these, so an admin is never the one acting.
+    // Modes and activities are both "the timetable"; the log does not say which.
+    private void audited(String userId, UserActionType action) {
+        audit.record(userId, UserActionFeature.TIMETABLE, action, false);
     }
 
     private String studentId(Jwt jwt) {

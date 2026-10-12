@@ -24,6 +24,7 @@ import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableActivityRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableModeRepository;
 import com.AttendanceRegister.sdc.Repository.TimetablePreferenceRepository;
+import com.AttendanceRegister.sdc.Repository.UserActionRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -57,6 +58,9 @@ class UserServiceTest {
     @Mock
     private TimetablePreferenceRepository timetablePreferenceRepository;
 
+    @Mock
+    private UserActionRepository userActionRepository;
+
     private final PasswordHasher passwordHasher = new PasswordHasher();
 
     private UserService userService;
@@ -65,7 +69,7 @@ class UserServiceTest {
     void setUp() {
         userService = new UserService(userRepository, passwordHasher, resetService, taskRepository,
                 pomodoroSessionRepository, calendarEventRepository, timetableModeRepository,
-                timetableActivityRepository, timetablePreferenceRepository);
+                timetableActivityRepository, timetablePreferenceRepository, userActionRepository);
     }
 
     private static User user(String storedPassword, boolean active, LocalDate paidTill) {
@@ -219,6 +223,7 @@ class UserServiceTest {
         verify(timetableActivityRepository).deleteByUserId("u1");
         verify(timetableModeRepository).deleteByUserId("u1");
         verify(timetablePreferenceRepository).deleteByUserId("u1");
+        verify(userActionRepository).deleteByUserId("u1");
         verify(userRepository).deleteById("u1");
     }
 

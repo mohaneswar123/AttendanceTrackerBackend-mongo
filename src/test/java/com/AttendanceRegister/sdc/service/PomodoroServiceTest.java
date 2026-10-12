@@ -66,12 +66,15 @@ class PomodoroServiceTest {
     @Mock
     private PomodoroSessionRepository repository;
 
+    @Mock
+    private UserAuditService audit;
+
     private final TestClock clock = new TestClock();
     private PomodoroService service;
 
     @BeforeEach
     void setUp() {
-        service = new PomodoroService(repository, clock, FOCUS, BREAK);
+        service = new PomodoroService(repository, audit, clock, FOCUS, BREAK);
     }
 
     private static PomodoroSession session(PomodoroStatus status) {

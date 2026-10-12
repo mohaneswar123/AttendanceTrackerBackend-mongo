@@ -36,7 +36,8 @@ directly in the database; there is no endpoint for it.
 | `PUT /api/users/admin/extend/{id}?days=N` | Admin | **Adds** N days to what is left (see below) |
 | `PUT /api/users/admin/deactivate/{id}` | Admin | Ends access now, and clears `paidTill` |
 | `PUT /api/users/admin/{id}/password` `{password}` | Admin | Sets a new password for a student who has forgotten theirs |
-| `GET /api/users/admin/activity?limit=&userId=` | Admin | The audit log, newest first (see below) |
+| `GET /api/users/admin/activity?limit=&userId=` | Admin | What admins have done, newest first (see below) |
+| `GET /api/users/admin/user-activity?userId=&limit=` | Admin | What one student has done (see below) |
 
 ## Activate or extend
 
@@ -51,7 +52,7 @@ Both grant access; they differ in where the days are counted from.
 Deactivating clears `paidTill` as well as the flag, so a switched-off account can never
 read as paid up.
 
-## The audit log
+## The admin log: what admins did
 
 Every admin action on an account is recorded in `admin_action_table`
 (`model/AdminAction.java`) once the change has succeeded: who did it, what they did, to
@@ -67,6 +68,40 @@ Two decisions worth knowing:
 
 `GET /api/users/admin/activity` returns the most recent entries, at most 200. Pass
 `userId` for one account's history.
+
+## The activity log: what the student did
+
+A second log, `user_action_table` (`model/UserAction.java`), answers a different question:
+is this account being used, and for what. It is written after each change succeeds, from
+the controller that handled it.
+
+Each entry is five fields and no more — `userId`, `feature`, `action`, `byAdmin`, `at`:
+
+- **`feature`** is `ATTENDANCE`, `SUBJECT`, `TASK`, `CALENDAR`, `TIMETABLE` or `FOCUS`.
+- **`action`** is `CREATE`, `UPDATE` or `DELETE`.
+- **`byAdmin`** is true when an admin did it on the student's behalf, so the log never
+  credits a student with something they did not do.
+
+**It deliberately holds nothing the student wrote.** No titles, no notes, no dates they
+chose. An admin can see that six tasks were added and one removed, never what any of them
+said. This is the whole reason it can be read by someone other than its owner.
+
+Three things follow from how it is written:
+
+- **Writing it can never break the thing it records.** `UserAuditService.record` swallows
+  its own failures and logs a warning: losing an audit line matters far less than losing
+  the student's work.
+- **Repeating a request does not add a second line.** The focus endpoints are all safe to
+  repeat, so those entries are written in `PomodoroService` where the conditional updates
+  report whether anything actually changed, rather than in the controller.
+- **Entries expire after 180 days** (`UserAuditService.KEEP_FOR_DAYS`), through a TTL index
+  created at startup by `config/UserActionIndexes.java`. Unlike the admin log it is
+  **deleted with the account**, because it describes that account's own use of the app
+  rather than something done to it.
+
+`GET /api/users/admin/user-activity?userId=` returns `{counts, entries, keptForDays}`:
+totals per feature and action, then the latest entries, at most 200. A student cannot read
+it, not even their own.
 
 ## Tokens
 
@@ -120,11 +155,15 @@ allowed while inactive, so nobody is locked out of the records they already have
 ## Deleting an account
 
 `UserService.deleteUser` removes, in one call: the account, its subjects and attendance
-records, its tasks, its Pomodoro sessions, its calendar entries, and its timetable modes,
-activities and preference. Anything added later must be deleted here too — `UserServiceTest`
-checks each repository is called.
+records, its tasks, its Pomodoro sessions, its calendar entries, its timetable modes,
+activities and preference, and its activity log. Anything added later must be deleted here
+too — `UserServiceTest` checks each repository is called.
+
+The admin log is the one thing that stays, because naming who was deleted is what it is
+for.
 
 ## Code
 
 `controller/UserController.java`, `controller/AdminController.java`,
-`service/UserService.java`, `service/AdminService.java`, `security/`.
+`service/UserService.java`, `service/AdminService.java`, `service/AdminAuditService.java`,
+`service/UserAuditService.java`, `config/UserActionIndexes.java`, `security/`.

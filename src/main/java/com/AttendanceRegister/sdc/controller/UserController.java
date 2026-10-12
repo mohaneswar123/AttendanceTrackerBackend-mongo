@@ -19,12 +19,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.AttendanceRegister.sdc.dto.AuthResponse;
 import com.AttendanceRegister.sdc.dto.LoginRequest;
 import com.AttendanceRegister.sdc.dto.RegisterRequest;
+import com.AttendanceRegister.sdc.dto.UserActivityResponse;
 import com.AttendanceRegister.sdc.model.AdminAction;
 import com.AttendanceRegister.sdc.model.AdminActionType;
 import com.AttendanceRegister.sdc.model.User;
 import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.security.TokenService;
 import com.AttendanceRegister.sdc.service.AdminAuditService;
+import com.AttendanceRegister.sdc.service.UserAuditService;
 import com.AttendanceRegister.sdc.service.UserService;
 
 @RestController
@@ -35,13 +37,15 @@ public class UserController {
     private final TokenService tokenService;
     private final AccessGuard accessGuard;
     private final AdminAuditService auditService;
+    private final UserAuditService userAuditService;
 
     public UserController(UserService userService, TokenService tokenService, AccessGuard accessGuard,
-            AdminAuditService auditService) {
+            AdminAuditService auditService, UserAuditService userAuditService) {
         this.userService = userService;
         this.tokenService = tokenService;
         this.accessGuard = accessGuard;
         this.auditService = auditService;
+        this.userAuditService = userAuditService;
     }
 
     // ✅ Register new user (public)
@@ -164,5 +168,18 @@ public class UserController {
         return ResponseEntity.ok(userId == null
                 ? auditService.recent(limit)
                 : auditService.forUser(userId, limit));
+    }
+
+    // ✅ What one student has been doing: totals per feature, then the latest entries.
+    // It records that something happened, never what the student wrote.
+    @GetMapping("/admin/user-activity")
+    public ResponseEntity<UserActivityResponse> userActivity(
+            @RequestParam String userId,
+            @RequestParam(defaultValue = "50") int limit) {
+
+        return ResponseEntity.ok(new UserActivityResponse(
+                userAuditService.counts(userId),
+                userAuditService.forUser(userId, limit),
+                UserAuditService.KEEP_FOR_DAYS));
     }
 }
