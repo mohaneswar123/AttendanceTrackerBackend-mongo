@@ -16,5 +16,7 @@ public enum UserActionFeature {
     /** A timetable mode or one of its weekly activities */
     TIMETABLE,
     /** A focus session */
-    FOCUS
+    FOCUS,
+    /** A habit, or one day marked against it */
+    HABIT
 }

@@ -1,6 +1,7 @@
 package com.AttendanceRegister.sdc.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -11,6 +12,9 @@ import com.AttendanceRegister.sdc.model.PomodoroSession;
 import com.AttendanceRegister.sdc.model.PomodoroStatus;
 
 public interface PomodoroSessionRepository extends MongoRepository<PomodoroSession, String> {
+
+    List<PomodoroSession> findByUserIdAndStatusAndCompletedAtBetween(
+            String userId, PomodoroStatus status, Instant from, Instant to);
     Optional<PomodoroSession> findFirstByUserIdAndStatus(String userId, PomodoroStatus status);
 
     Optional<PomodoroSession> findFirstByUserIdOrderByStartedAtDesc(String userId);

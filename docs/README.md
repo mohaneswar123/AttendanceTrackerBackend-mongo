@@ -11,6 +11,7 @@ endpoints, the rules the server enforces and where the code lives.
 | [pomodoro.md](pomodoro.md) | The focus timer, which runs on the server |
 | [calendar.md](calendar.md) | Dated events and reminders |
 | [timetable.md](timetable.md) | Reusable weekly routines grouped into modes |
+| [habits.md](habits.md) | Habits, the three states, streaks and the week in review |
 
 ## Shared ground
 
@@ -49,6 +50,7 @@ file:
 | 409 | `EMAIL_EXISTS` | Another account already uses that email |
 | 409 | `FOCUS_ALREADY_RUNNING` | A focus session is already running |
 | 409 | `ACTIVITY_OVERLAP` | Two timetable activities would overlap |
+| 409 | `HABIT_HAS_HISTORY` | A habit with days recorded has to be archived, not deleted |
 | 400 | `INVALID_POSITION` | A task move named neighbours that don't fit |
 | 429 | `TOO_MANY_ATTEMPTS` | Too many failed admin sign-ins; wait and try again |
 
