@@ -3,6 +3,9 @@ package com.AttendanceRegister.sdc.service;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
+import com.AttendanceRegister.sdc.dto.FocusTodayResponse;
 import com.AttendanceRegister.sdc.dto.PomodoroState;
 import com.AttendanceRegister.sdc.dto.PomodoroState.Phase;
 import com.AttendanceRegister.sdc.exception.ApiException;
@@ -58,6 +62,21 @@ public class PomodoroService {
         if (changed > 0) {
             audit.record(userId, UserActionFeature.FOCUS, action, false);
         }
+    }
+
+    /**
+     * Focus finished today, for the Home screen. Only COMPLETED sessions count: a session
+     * that was reset was deliberately not counted, and one still running has not finished.
+     */
+    public FocusTodayResponse todayTotals(String userId) {
+        LocalDate today = LocalDate.now(clock);
+        List<PomodoroSession> done = sessionRepository.findByUserIdAndStatusAndCompletedAtBetween(
+                userId,
+                PomodoroStatus.COMPLETED,
+                today.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                today.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+        int seconds = done.stream().mapToInt(PomodoroSession::getDurationSeconds).sum();
+        return new FocusTodayResponse(Math.round(seconds / 60f), done.size());
     }
 
     public PomodoroState current(String userId) {

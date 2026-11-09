@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.AttendanceRegister.sdc.dto.FocusTodayResponse;
 import com.AttendanceRegister.sdc.dto.PomodoroState;
 import com.AttendanceRegister.sdc.dto.StartPomodoroRequest;
 import com.AttendanceRegister.sdc.security.AccessGuard;
@@ -33,6 +34,12 @@ public class PomodoroController {
     @GetMapping("/current")
     public ResponseEntity<PomodoroState> current(@AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(pomodoroService.current(studentId(jwt)));
+    }
+
+    // ✅ How much focus has been finished today, for the Home screen
+    @GetMapping("/today")
+    public ResponseEntity<FocusTodayResponse> today(@AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(pomodoroService.todayTotals(studentId(jwt)));
     }
 
     // ✅ Start a focus session, optionally with the student's own focus and break lengths

@@ -11,6 +11,8 @@ import com.AttendanceRegister.sdc.Repository.PomodoroSessionRepository;
 import com.AttendanceRegister.sdc.Repository.TaskRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableActivityRepository;
 import com.AttendanceRegister.sdc.Repository.TimetableModeRepository;
+import com.AttendanceRegister.sdc.Repository.HabitEntryRepository;
+import com.AttendanceRegister.sdc.Repository.HabitRepository;
 import com.AttendanceRegister.sdc.Repository.TimetablePreferenceRepository;
 import com.AttendanceRegister.sdc.Repository.UserActionRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
@@ -32,6 +34,8 @@ public class UserService {
     private final TimetableActivityRepository timetableActivityRepository;
     private final TimetablePreferenceRepository timetablePreferenceRepository;
     private final UserActionRepository userActionRepository;
+    private final HabitRepository habitRepository;
+    private final HabitEntryRepository habitEntryRepository;
 
     public UserService(UserRepository userRepository, PasswordHasher passwordHasher, ResetService resetService,
                        TaskRepository taskRepository, PomodoroSessionRepository pomodoroSessionRepository,
@@ -39,7 +43,9 @@ public class UserService {
                        TimetableModeRepository timetableModeRepository,
                        TimetableActivityRepository timetableActivityRepository,
                        TimetablePreferenceRepository timetablePreferenceRepository,
-                       UserActionRepository userActionRepository) {
+                       UserActionRepository userActionRepository,
+                       HabitRepository habitRepository,
+                       HabitEntryRepository habitEntryRepository) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.resetService = resetService;
@@ -50,6 +56,8 @@ public class UserService {
         this.timetableActivityRepository = timetableActivityRepository;
         this.timetablePreferenceRepository = timetablePreferenceRepository;
         this.userActionRepository = userActionRepository;
+        this.habitRepository = habitRepository;
+        this.habitEntryRepository = habitEntryRepository;
     }
 
     public User validateLogin(String email, String rawPassword) {
@@ -134,6 +142,8 @@ public class UserService {
         timetableActivityRepository.deleteByUserId(id);
         timetableModeRepository.deleteByUserId(id);
         timetablePreferenceRepository.deleteByUserId(id);
+        habitEntryRepository.deleteByUserId(id);
+        habitRepository.deleteByUserId(id);
         // Their activity log goes too: it is about this account's own use of the app,
         // unlike the admin log, which has to outlive the account it describes
         userActionRepository.deleteByUserId(id);

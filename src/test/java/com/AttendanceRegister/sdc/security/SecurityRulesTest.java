@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import com.AttendanceRegister.sdc.Repository.AdminRepository;
 import com.AttendanceRegister.sdc.Repository.UserRepository;
 import com.AttendanceRegister.sdc.controller.AdminController;
+import com.AttendanceRegister.sdc.controller.HabitController;
 import com.AttendanceRegister.sdc.controller.AttendanceRecordController;
 import com.AttendanceRegister.sdc.controller.CalendarEventController;
 import com.AttendanceRegister.sdc.controller.PomodoroController;
@@ -54,6 +55,7 @@ import com.AttendanceRegister.sdc.service.CalendarEventService;
 import com.AttendanceRegister.sdc.service.PomodoroService;
 import com.AttendanceRegister.sdc.service.ResetService;
 import com.AttendanceRegister.sdc.service.SubjectService;
+import com.AttendanceRegister.sdc.service.HabitService;
 import com.AttendanceRegister.sdc.service.TimetableService;
 import com.AttendanceRegister.sdc.service.TaskService;
 import com.AttendanceRegister.sdc.service.UserService;
@@ -64,7 +66,7 @@ import com.jayway.jsonpath.JsonPath;
         UserController.class, AdminController.class, SubjectController.class,
         AttendanceRecordController.class, ResetController.class,
         TaskController.class, PomodoroController.class, CalendarEventController.class,
-        TimetableController.class })
+        TimetableController.class, HabitController.class })
 @Import({ SecurityConfig.class, AccessGuard.class, TokenService.class })
 class SecurityRulesTest {
 
@@ -94,6 +96,8 @@ class SecurityRulesTest {
     private CalendarEventService calendarEventService;
     @MockitoBean
     private TimetableService timetableService;
+    @MockitoBean
+    private HabitService habitService;
     @MockitoBean
     private AdminAuditService auditService;
     @MockitoBean
@@ -304,6 +308,30 @@ class SecurityRulesTest {
         mvc.perform(get("/api/timetable/modes").with(asUser("u1")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"));
+    }
+
+    @Test
+    void habitsNeedAnActiveStudent() throws Exception {
+        mvc.perform(get("/api/habits")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/habits").with(asAdmin())).andExpect(status().isForbidden());
+
+        User user = activeUser("u1");
+        doThrow(new ApiException(HttpStatus.FORBIDDEN, "SUBSCRIPTION_INACTIVE", "Your subscription is not active."))
+                .when(userService).requireActiveSubscription(user);
+        mvc.perform(get("/api/habits").with(asUser("u1")))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"));
+    }
+
+    @Test
+    void habitsAlwaysUseTheSignedInStudent() throws Exception {
+        activeUser("u1");
+        when(habitService.getHabits("u1", false)).thenReturn(List.of());
+
+        // A userId in the request is ignored; the student comes from the token
+        mvc.perform(get("/api/habits").param("userId", "u2").with(asUser("u1")))
+                .andExpect(status().isOk());
+        verify(habitService).getHabits("u1", false);
     }
 
     @Test
