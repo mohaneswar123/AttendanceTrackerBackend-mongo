@@ -121,6 +121,10 @@ public class CalendarEventService {
         }
         LocalDate date = Dates.parseIsoDate(request.date(), "Date");
         boolean allDay = Boolean.TRUE.equals(request.allDay());
+        // Null leaves the category alone, so editing a time does not clear what it is about
+        if (request.category() != null) {
+            event.setCategory(request.category());
+        }
 
         Instant startAt = null;
         Instant endAt = null;
@@ -152,6 +156,7 @@ public class CalendarEventService {
                 event.getId(),
                 event.getTitle(),
                 event.getType(),
+                event.getCategory(),
                 event.getEventDate(),
                 event.isAllDay(),
                 localTime(event.getStartAt()),

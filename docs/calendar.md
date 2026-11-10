@@ -15,6 +15,7 @@ The calendar holds things with a **date**. Repeating routines belong in
 | `id`, `userId` | |
 | `title` | Required, at most 200 characters |
 | `type` | `EVENT` or `REMINDER` (`model/CalendarEventType.java`) |
+| `category` | `CLASS`, `STUDY`, `EXAM`, `DEADLINE`, `PERSONAL`, or null. What the entry is *about*, which is separate from whether it is an event or a reminder: a deadline can be either. Null on `PUT` keeps whatever the entry had, so moving a time never repaints the calendar. |
 | `eventDate` | `YYYY-MM-DD` in the calendar's time zone |
 | `allDay` | |
 | `startAt`, `endAt` | Instants, or null for an all-day entry |

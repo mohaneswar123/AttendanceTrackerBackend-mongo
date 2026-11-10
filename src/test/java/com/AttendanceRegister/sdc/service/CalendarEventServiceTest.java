@@ -36,6 +36,7 @@ import com.AttendanceRegister.sdc.dto.CalendarEventRequest;
 import com.AttendanceRegister.sdc.dto.CalendarEventResponse;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.CalendarEvent;
+import com.AttendanceRegister.sdc.model.CalendarEventCategory;
 import com.AttendanceRegister.sdc.model.CalendarEventType;
 
 @ExtendWith(MockitoExtension.class)
@@ -58,7 +59,7 @@ class CalendarEventServiceTest {
     }
 
     private static CalendarEventRequest timed(String date, String start, String end) {
-        return new CalendarEventRequest("DSA exam", CalendarEventType.EVENT, date, false, start, end);
+        return new CalendarEventRequest("DSA exam", CalendarEventType.EVENT, null, date, false, start, end);
     }
 
     // Creates the entry and returns what was saved
@@ -128,10 +129,50 @@ class CalendarEventServiceTest {
         assertThat(lastMinute.getEndAt()).isNull();
     }
 
+    /**
+     * What an entry is about survives an edit that only moves it. Clearing the category
+     * whenever a time changed would quietly repaint the calendar.
+     */
+    @Test
+    void aCategoryIsKeptWhenAnEditDoesNotMentionIt() {
+        CalendarEvent saved = create(new CalendarEventRequest(
+                "Physics practical", CalendarEventType.EVENT, CalendarEventCategory.CLASS,
+                "2026-09-25", false, "11:00", "13:00"));
+        assertThat(saved.getCategory()).isEqualTo(CalendarEventCategory.CLASS);
+
+        when(repository.findById("e1")).thenReturn(Optional.of(saved));
+        saved.setId("e1");
+        when(repository.save(any(CalendarEvent.class))).thenAnswer(call -> call.getArgument(0));
+
+        CalendarEventResponse moved = service.updateEvent("u1", "e1", new CalendarEventRequest(
+                "Physics practical", CalendarEventType.EVENT, null,
+                "2026-09-25", false, "14:00", "16:00"));
+
+        assertThat(moved.category()).isEqualTo(CalendarEventCategory.CLASS);
+    }
+
+    @Test
+    void aCategoryCanBeChanged() {
+        CalendarEvent saved = create(new CalendarEventRequest(
+                "Study block", CalendarEventType.EVENT, CalendarEventCategory.STUDY,
+                "2026-09-25", true, null, null));
+
+        assertThat(saved.getCategory()).isEqualTo(CalendarEventCategory.STUDY);
+    }
+
+    @Test
+    void anEntryWithoutACategoryIsStillAllowed() {
+        CalendarEvent saved = create(new CalendarEventRequest(
+                "Something", CalendarEventType.REMINDER, null, "2026-09-25", true, null, null));
+
+        // Null is what entries saved before categories existed look like
+        assertThat(saved.getCategory()).isNull();
+    }
+
     @Test
     void allDayEntriesIgnoreAnyTimes() {
         CalendarEvent saved = create(new CalendarEventRequest(
-                "Holiday", CalendarEventType.REMINDER, "2026-10-02", true, "10:00", "09:00"));
+                "Holiday", CalendarEventType.REMINDER, null, "2026-10-02", true, "10:00", "09:00"));
 
         assertThat(saved.isAllDay()).isTrue();
         assertThat(saved.getStartAt()).isNull();
@@ -143,19 +184,19 @@ class CalendarEventServiceTest {
 
     @Test
     void titleIsTrimmedAndLimited() {
-        CalendarEvent saved = create(new CalendarEventRequest("  Viva  ", CalendarEventType.EVENT, "2026-09-25", true, null, null));
+        CalendarEvent saved = create(new CalendarEventRequest("  Viva  ", CalendarEventType.EVENT, null, "2026-09-25", true, null, null));
         assertThat(saved.getTitle()).isEqualTo("Viva");
 
         assertBadRequest(catchThrowable(() -> service.createEvent("u1",
-                new CalendarEventRequest(" ", CalendarEventType.EVENT, "2026-09-25", true, null, null))), "Title is required");
+                new CalendarEventRequest(" ", CalendarEventType.EVENT, null, "2026-09-25", true, null, null))), "Title is required");
         assertBadRequest(catchThrowable(() -> service.createEvent("u1",
-                new CalendarEventRequest("x".repeat(201), CalendarEventType.EVENT, "2026-09-25", true, null, null))), "at most 200");
+                new CalendarEventRequest("x".repeat(201), CalendarEventType.EVENT, null, "2026-09-25", true, null, null))), "at most 200");
     }
 
     @Test
     void invalidEntriesAreRejected() {
         assertBadRequest(catchThrowable(() -> service.createEvent("u1",
-                new CalendarEventRequest("Exam", null, "2026-09-25", true, null, null))), "Event or Reminder");
+                new CalendarEventRequest("Exam", null, null, "2026-09-25", true, null, null))), "Event or Reminder");
         assertBadRequest(catchThrowable(() -> service.createEvent("u1", timed("2026-02-30", "10:00", null))), "real date");
         assertBadRequest(catchThrowable(() -> service.createEvent("u1", timed("2026-09-25", "25:00", null))), "Start time");
         assertBadRequest(catchThrowable(() -> service.createEvent("u1", timed("2026-09-25", "10:00", "7pm"))), "End time");
