@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -14,6 +15,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import org.springframework.stereotype.Service;
 import com.AttendanceRegister.sdc.Repository.HabitEntryRepository;
 import com.AttendanceRegister.sdc.Repository.HabitRepository;
 import com.AttendanceRegister.sdc.dto.HabitEntryRequest;
+import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitEntryResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
@@ -197,6 +200,163 @@ public class HabitService {
         LocalDate day = Dates.parseIsoDate(date, "Date");
         entryRepository.findByHabitIdAndDate(habitId, day).ifPresent(entryRepository::delete);
         return toResponse(habit, entriesFor(habitId), now());
+    }
+
+    // --- Progress over a chosen stretch of time
+
+    /** The stretches the Progress screen offers */
+    public enum ProgressRange {
+        WEEK, MONTH, YEAR
+    }
+
+    /**
+     * How the habits went this week, this month or this year, with the stretch cut into
+     * pieces the page can draw.
+     *
+     * The pieces get coarser as the stretch gets longer — days, then weeks, then months —
+     * because a year of day-sized pieces is 365 columns nobody can read, and because a
+     * "3 times a week" habit only means anything over a whole week.
+     */
+    public HabitProgressResponse progress(String userId, ProgressRange range) {
+        LocalDate today = today();
+        LocalDate from = switch (range) {
+            case WEEK -> weekStart(today);
+            case MONTH -> today.withDayOfMonth(1);
+            case YEAR -> today.withDayOfYear(1);
+        };
+
+        List<Habit> habits = habitRepository.findByUserIdOrderByPositionAsc(userId).stream()
+                .filter(habit -> !habit.isArchived())
+                .toList();
+        Map<String, Map<LocalDate, HabitEntry>> byHabit = entriesByHabit(userId);
+        LocalDateTime now = now();
+
+        int done = 0;
+        int due = 0;
+        List<HabitProgressResponse.HabitFigures> perHabit = new ArrayList<>();
+        for (Habit habit : habits) {
+            Map<LocalDate, HabitEntry> entries = byHabit.getOrDefault(habit.getId(), Map.of());
+            Week figures = rangeFigures(habit, entries, from, today, now);
+            done += figures.done();
+            due += figures.due();
+            perHabit.add(new HabitProgressResponse.HabitFigures(
+                    habit.getId(), habit.getName(), habit.getIcon(),
+                    figures.done(), figures.due(),
+                    figures.due() > 0 ? percentage(figures.done(), figures.due()) : -1));
+        }
+
+        // Worst first, and habits with nothing due last: the point of the screen is what
+        // needs attention, not an alphabet
+        perHabit.sort(Comparator
+                .comparingInt((HabitProgressResponse.HabitFigures f) -> f.rate() < 0 ? 1 : 0)
+                .thenComparingInt(HabitProgressResponse.HabitFigures::rate));
+
+        // A day-long piece cannot judge "3 times a week", so those habits sit out the week's
+        // day-sized pieces. The headline above still counts every habit.
+        boolean dayPieces = range == ProgressRange.WEEK;
+        List<Habit> inPieces = dayPieces
+                ? habits.stream().filter(habit -> habit.getSchedule() != HabitSchedule.TIMES_PER_WEEK).toList()
+                : habits;
+        String note = dayPieces && inPieces.size() < habits.size()
+                ? "Days count the habits set to particular days. A \"times a week\" habit is judged "
+                        + "over the whole week, so it is in the figure above but not in the bars."
+                : null;
+
+        return new HabitProgressResponse(
+                range.name(), from.toString(), today.toString(),
+                done, due, due > 0 ? percentage(done, due) : -1,
+                buckets(range, inPieces, byHabit, from, today, now),
+                note,
+                perHabit);
+    }
+
+    /** The stretch cut into pieces, each piece carrying its own figures */
+    private static List<HabitProgressResponse.Bucket> buckets(ProgressRange range, List<Habit> habits,
+            Map<String, Map<LocalDate, HabitEntry>> byHabit, LocalDate from, LocalDate today, LocalDateTime now) {
+
+        List<HabitProgressResponse.Bucket> buckets = new ArrayList<>();
+        switch (range) {
+            case WEEK -> {
+                // The whole week, so the days still to come are visible as empty
+                for (LocalDate day = from; !day.isAfter(from.plusDays(6)); day = day.plusDays(1)) {
+                    buckets.add(bucket(day.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                            habits, byHabit, day, day, now));
+                }
+            }
+            case MONTH -> {
+                // Monday weeks, clipped to the month. They have to start on a Monday, or a
+                // "3 times a week" habit would be charged its three twice for one piece.
+                LocalDate monthEnd = from.withDayOfMonth(from.lengthOfMonth());
+                int week = 1;
+                for (LocalDate cursor = weekStart(from); !cursor.isAfter(monthEnd); cursor = cursor.plusWeeks(1)) {
+                    LocalDate start = cursor.isBefore(from) ? from : cursor;
+                    LocalDate end = cursor.plusDays(6).isAfter(monthEnd) ? monthEnd : cursor.plusDays(6);
+                    buckets.add(bucket("Week " + week++, habits, byHabit, start, notAfter(end, today), now));
+                }
+            }
+            case YEAR -> {
+                LocalDate yearEnd = from.withDayOfYear(from.lengthOfYear());
+                for (LocalDate start = from; !start.isAfter(yearEnd); start = start.plusMonths(1)) {
+                    buckets.add(bucket(start.getMonth().getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
+                            habits, byHabit, start,
+                            notAfter(start.withDayOfMonth(start.lengthOfMonth()), today), now));
+                }
+            }
+        }
+        return buckets;
+    }
+
+    /** The earlier of two days, so a piece never counts days that have not happened */
+    private static LocalDate notAfter(LocalDate day, LocalDate limit) {
+        return day.isAfter(limit) ? limit : day;
+    }
+
+    private static HabitProgressResponse.Bucket bucket(String label, List<Habit> habits,
+            Map<String, Map<LocalDate, HabitEntry>> byHabit, LocalDate from, LocalDate to, LocalDateTime now) {
+
+        int done = 0;
+        int due = 0;
+        for (Habit habit : habits) {
+            Week figures = rangeFigures(habit, byHabit.getOrDefault(habit.getId(), Map.of()), from, to, now);
+            done += figures.done();
+            due += figures.due();
+        }
+        return new HabitProgressResponse.Bucket(label, from.toString(), to.toString(),
+                done, due, due > 0 ? percentage(done, due) : -1);
+    }
+
+    /**
+     * Done and due over any stretch, counted one week at a time.
+     *
+     * It has to be week by week because a "3 times a week" habit owes three a week, not
+     * three a month: summing the weeks is the only way that habit's target scales with the
+     * stretch being asked about. For a habit tied to weekdays the two are the same sum.
+     *
+     * A week only partly inside the stretch still asks for its full three, so a stretch
+     * that starts mid-week reads slightly harsh on its first week. Judging a part-week on a
+     * fraction of its target would be worse: it would invent a target the student was never
+     * set.
+     */
+    private static Week rangeFigures(Habit habit, Map<LocalDate, HabitEntry> entries,
+            LocalDate from, LocalDate to, LocalDateTime now) {
+
+        // Nothing was owed before the habit existed, so a year-long stretch does not bill a
+        // habit started in November for the ten months before it
+        LocalDate began = earliestDay(habit, entries, to);
+        LocalDate start = from.isBefore(began) ? began : from;
+        if (to.isBefore(start)) {
+            return new Week(0, 0);
+        }
+        int done = 0;
+        int due = 0;
+        for (LocalDate week = weekStart(start); !week.isAfter(to); week = week.plusWeeks(1)) {
+            LocalDate weekFrom = week.isBefore(start) ? start : week;
+            LocalDate end = week.plusDays(6).isAfter(to) ? to : week.plusDays(6);
+            Week figures = weekFigures(habit, entries, weekFrom, end, now);
+            done += figures.done();
+            due += figures.due();
+        }
+        return new Week(done, due);
     }
 
     // --- The week in review

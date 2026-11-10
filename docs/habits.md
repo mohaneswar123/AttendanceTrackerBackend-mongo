@@ -43,12 +43,48 @@ answers 404, the same as one that does not exist.
 | `GET /api/habits?includeArchived=` | Every habit with its figures worked out |
 | `GET /api/habits/entries?from=&to=` | The marked days in a range, for the grid |
 | `GET /api/habits/summary` | Last week in review, with one suggestion |
+| `GET /api/habits/progress?range=WEEK\|MONTH\|YEAR` | How the habits went over that stretch — see below. Anything else is 400. |
 | `POST /api/habits` | Create |
 | `PUT /api/habits/{id}` | Edit |
 | `PUT /api/habits/{id}/archive`, `/unarchive` | Stop or resume being due |
 | `DELETE /api/habits/{id}` | Only when nothing was ever marked; otherwise 409 `HABIT_HAS_HISTORY` |
 | `PUT /api/habits/{id}/entries/{date}` | Mark a day `{status, amount, note}` |
 | `DELETE /api/habits/{id}/entries/{date}` | Undo a mark |
+
+## Progress over a week, a month or a year
+
+`GET /api/habits/progress` answers with one headline figure, the same stretch cut into
+pieces, and the stretch per habit:
+
+```
+{ range, from, to, done, due, rate, buckets: [...], bucketNote, habits: [...] }
+```
+
+A `rate` of -1 means nothing was due, which reads differently from 0%.
+
+**The sum is done one week at a time.** A "3 times a week" habit owes three a week, not
+three a month, so the only way its target scales with the stretch is to walk the stretch
+week by week and add up. For a habit tied to particular days the two come to the same
+number.
+
+**Nothing is owed before the habit existed.** A habit made in November is not billed for
+the ten months of the year before it, which would otherwise report 1% to a student who has
+kept it every day since they made it.
+
+**The pieces get coarser as the stretch gets longer:** days for a week, whole Monday weeks
+for a month, months for a year. Two consequences fall out of that:
+
+- A piece one day long cannot judge a "times a week" habit, so those habits sit out the
+  week's day-sized pieces. `bucketNote` says so when it happens, and it is null otherwise.
+  The headline still counts every habit.
+- The month's pieces are Monday weeks clipped to the month, not seven-day blocks from the
+  1st. A block starting on the 1st straddles two weeks, and a "3 times a week" habit would
+  then be charged its three twice for the one piece. Clipped this way the pieces add up to
+  the month exactly. A year's months cannot tile into weeks, so a week spanning two months
+  is counted in both and only the headline is exact.
+
+A piece never reaches past today: the rest of the month is drawn, so the shape of the
+stretch is visible, but it asks for nothing.
 
 ## The three states
 
