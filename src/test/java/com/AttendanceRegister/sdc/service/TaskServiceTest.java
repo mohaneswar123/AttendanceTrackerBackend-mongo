@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +34,7 @@ import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.Task;
 import com.AttendanceRegister.sdc.model.TaskPriority;
 import com.AttendanceRegister.sdc.model.TaskStatus;
+import com.AttendanceRegister.sdc.model.TaskStep;
 
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
@@ -64,14 +66,14 @@ class TaskServiceTest {
         when(taskRepository.findById(task.getId())).thenReturn(Optional.of(task));
     }
 
-    private void givenColumn(TaskStatus status, Task... tasks) {
-        when(taskRepository.findByUserIdAndStatusOrderByPositionAsc("u1", status)).thenReturn(List.of(tasks));
+    private void givenList(Task... tasks) {
+        when(taskRepository.findByUserId(eq("u1"), any(Sort.class))).thenReturn(List.of(tasks));
     }
 
-    private Task move(String taskId, TaskStatus status, String afterId, String beforeId) {
+    private Task move(String taskId, String afterId, String beforeId) {
         // lenient: rejected moves never get as far as saving
         lenient().when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
-        return taskService.moveTask("u1", taskId, new MoveTaskRequest(status, afterId, beforeId));
+        return taskService.moveTask("u1", taskId, new MoveTaskRequest(afterId, beforeId));
     }
 
     private static void assertApiError(Throwable thrown, HttpStatus status, String code) {
@@ -82,16 +84,16 @@ class TaskServiceTest {
     }
 
     @Test
-    void createPutsTaskAtTheEndOfToDo() {
-        when(taskRepository.findFirstByUserIdAndStatusOrderByPositionDesc("u1", TaskStatus.TODO))
-                .thenReturn(Optional.of(task("last", TaskStatus.TODO, 2048)));
+    void createPutsTaskAtTheEndOfTheList() {
+        givenList(task("last", TaskStatus.TODO, 2048));
         when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Task created = taskService.createTask("u1", new TaskRequest("  Revise Unit 2  ", "2026-09-22", null));
+        Task created = taskService.createTask("u1",
+                new TaskRequest("  Revise Unit 2  ", "2026-09-22", null, null, null));
 
         assertThat(created.getTitle()).isEqualTo("Revise Unit 2");
         assertThat(created.getStatus()).isEqualTo(TaskStatus.TODO);
-        assertThat(created.getPriority()).isNull();
+        assertThat(created.isImportant()).isFalse();
         assertThat(created.getPosition()).isEqualTo(3072);
         assertThat(created.getUserId()).isEqualTo("u1");
         assertThat(created.getCreatedAt()).isEqualTo(NOW);
@@ -100,7 +102,7 @@ class TaskServiceTest {
     @Test
     void createRejectsImpossibleDate() {
         Throwable thrown = catchThrowable(
-                () -> taskService.createTask("u1", new TaskRequest("Read", "2026-02-30", null)));
+                () -> taskService.createTask("u1", new TaskRequest("Read", "2026-02-30", null, null, null)));
 
         assertApiError(thrown, HttpStatus.BAD_REQUEST, "BAD_REQUEST");
         verify(taskRepository, never()).save(any());
@@ -108,23 +110,33 @@ class TaskServiceTest {
 
     @Test
     void createRejectsBlankOrLongTitle() {
-        assertApiError(catchThrowable(() -> taskService.createTask("u1", new TaskRequest(" ", "2026-09-22", null))),
+        assertApiError(catchThrowable(() -> taskService.createTask("u1", new TaskRequest(" ", "2026-09-22", null, null, null))),
                 HttpStatus.BAD_REQUEST, "BAD_REQUEST");
-        assertApiError(catchThrowable(() -> taskService.createTask("u1", new TaskRequest("x".repeat(201), "2026-09-22", null))),
+        assertApiError(catchThrowable(() -> taskService.createTask("u1", new TaskRequest("x".repeat(201), "2026-09-22", null, null, null))),
                 HttpStatus.BAD_REQUEST, "BAD_REQUEST");
     }
 
     @Test
-    void updateCanClearPriority() {
+    void updateCanClearTheStar() {
         Task existing = task("t1", TaskStatus.TODO, 1024);
-        existing.setPriority(TaskPriority.HIGH);
+        existing.setImportant(true);
         givenTask(existing);
         when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Task updated = taskService.updateTask("u1", "t1", new TaskRequest("New title", "2026-09-23", null));
+        Task updated = taskService.updateTask("u1", "t1",
+                new TaskRequest("New title", "2026-09-23", null, null, null));
 
-        assertThat(updated.getPriority()).isNull();
+        assertThat(updated.isImportant()).isFalse();
         assertThat(updated.getTaskDate()).isEqualTo("2026-09-23");
+    }
+
+    @Test
+    void aTaskStarredBeforeTheStarExistedIsStillImportant() {
+        // High priority was the old name for the same idea, so nothing is lost
+        Task old = task("t1", TaskStatus.TODO, 1024);
+        old.setPriority(TaskPriority.HIGH);
+
+        assertThat(old.isImportant()).isTrue();
     }
 
     @Test
@@ -140,12 +152,10 @@ class TaskServiceTest {
     @Test
     void moveBetweenTwoNeighbours() {
         givenTask(task("x", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.IN_PROGRESS,
-                task("a", TaskStatus.IN_PROGRESS, 1024), task("b", TaskStatus.IN_PROGRESS, 2048));
+        givenList(task("a", TaskStatus.TODO, 1024), task("b", TaskStatus.TODO, 2048));
 
-        Task moved = move("x", TaskStatus.IN_PROGRESS, "a", "b");
+        Task moved = move("x", "a", "b");
 
-        assertThat(moved.getStatus()).isEqualTo(TaskStatus.IN_PROGRESS);
         assertThat(moved.getPosition()).isEqualTo(1536);
     }
 
@@ -153,49 +163,49 @@ class TaskServiceTest {
     void moveKeepsTheOrderOfTasksHiddenByTheFilter() {
         // "h" is dated another day, so the student saw a and b next to each other
         givenTask(task("x", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.IN_PROGRESS, task("a", TaskStatus.IN_PROGRESS, 1024),
-                task("h", TaskStatus.IN_PROGRESS, 2048), task("b", TaskStatus.IN_PROGRESS, 3072));
+        givenList(task("a", TaskStatus.TODO, 1024),
+                task("h", TaskStatus.TODO, 2048), task("b", TaskStatus.TODO, 3072));
 
-        Task moved = move("x", TaskStatus.IN_PROGRESS, "a", "b");
+        Task moved = move("x", "a", "b");
 
         assertThat(moved.getPosition()).isGreaterThan(1024).isLessThan(2048);
     }
 
     @Test
-    void moveIntoAnEmptyColumnOrToTheEnd() {
+    void moveIntoAnEmptyListOrToTheEnd() {
         givenTask(task("x", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.DONE);
-        assertThat(move("x", TaskStatus.DONE, null, null).getPosition()).isEqualTo(1024);
+        givenList();
+        assertThat(move("x", null, null).getPosition()).isEqualTo(1024);
 
         givenTask(task("y", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.IN_PROGRESS, task("a", TaskStatus.IN_PROGRESS, 5000));
-        assertThat(move("y", TaskStatus.IN_PROGRESS, null, null).getPosition()).isEqualTo(6024);
+        givenList(task("a", TaskStatus.TODO, 5000));
+        assertThat(move("y", null, null).getPosition()).isEqualTo(6024);
     }
 
     @Test
     void moveToTheTopBeforeTheFirstTask() {
         givenTask(task("x", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.IN_PROGRESS, task("a", TaskStatus.IN_PROGRESS, 1024));
+        givenList(task("a", TaskStatus.TODO, 1024));
 
-        assertThat(move("x", TaskStatus.IN_PROGRESS, null, "a").getPosition()).isEqualTo(0);
+        assertThat(move("x", null, "a").getPosition()).isEqualTo(0);
     }
 
     @Test
-    void moveWithinTheSameColumnIgnoresTheTaskItself() {
+    void moveIgnoresTheTaskItself() {
         Task x = task("x", TaskStatus.TODO, 1024);
         givenTask(x);
-        givenColumn(TaskStatus.TODO, x, task("a", TaskStatus.TODO, 2048), task("b", TaskStatus.TODO, 3072));
+        givenList(x, task("a", TaskStatus.TODO, 2048), task("b", TaskStatus.TODO, 3072));
 
-        assertThat(move("x", TaskStatus.TODO, "a", "b").getPosition()).isEqualTo(2560);
+        assertThat(move("x", "a", "b").getPosition()).isEqualTo(2560);
     }
 
     @Test
-    void moveRejectsNeighboursOutsideTheDestinationColumn() {
+    void moveRejectsANeighbourThatIsNotInTheList() {
         givenTask(task("x", TaskStatus.TODO, 1024));
         // "z" might be in another column or belong to another student: either way it isn't here
-        givenColumn(TaskStatus.IN_PROGRESS, task("a", TaskStatus.IN_PROGRESS, 1024));
+        givenList(task("a", TaskStatus.TODO, 1024));
 
-        Throwable thrown = catchThrowable(() -> move("x", TaskStatus.IN_PROGRESS, "z", null));
+        Throwable thrown = catchThrowable(() -> move("x", "z", null));
 
         assertApiError(thrown, HttpStatus.BAD_REQUEST, "INVALID_POSITION");
         verify(taskRepository, never()).save(any());
@@ -204,24 +214,23 @@ class TaskServiceTest {
     @Test
     void moveRejectsNeighboursInTheWrongOrderOrItself() {
         givenTask(task("x", TaskStatus.TODO, 1024));
-        givenColumn(TaskStatus.IN_PROGRESS,
-                task("a", TaskStatus.IN_PROGRESS, 1024), task("b", TaskStatus.IN_PROGRESS, 2048));
+        givenList(task("a", TaskStatus.TODO, 1024), task("b", TaskStatus.TODO, 2048));
 
-        assertApiError(catchThrowable(() -> move("x", TaskStatus.IN_PROGRESS, "b", "a")),
+        assertApiError(catchThrowable(() -> move("x", "b", "a")),
                 HttpStatus.BAD_REQUEST, "INVALID_POSITION");
-        assertApiError(catchThrowable(() -> move("x", TaskStatus.IN_PROGRESS, "x", null)),
+        assertApiError(catchThrowable(() -> move("x", "x", null)),
                 HttpStatus.BAD_REQUEST, "INVALID_POSITION");
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void moveRenumbersTheColumnWhenThereIsNoRoomLeft() {
+    void moveRenumbersTheListWhenThereIsNoRoomLeft() {
         Task a = task("a", TaskStatus.TODO, 1.0);
         Task b = task("b", TaskStatus.TODO, 1.0 + 1e-7);
         givenTask(task("x", TaskStatus.DONE, 1024));
-        givenColumn(TaskStatus.TODO, a, b);
+        givenList(a, b);
 
-        Task moved = move("x", TaskStatus.TODO, "a", "b");
+        Task moved = move("x", "a", "b");
 
         ArgumentCaptor<List<Task>> renumbered = ArgumentCaptor.forClass(List.class);
         verify(taskRepository).saveAll(renumbered.capture());
@@ -230,15 +239,103 @@ class TaskServiceTest {
     }
 
     @Test
-    void doneSetsCompletedAtAndLeavingDoneClearsIt() {
-        givenTask(task("x", TaskStatus.IN_PROGRESS, 1024));
-        givenColumn(TaskStatus.DONE);
-        Task done = move("x", TaskStatus.DONE, null, null);
+    void tickingOffSetsCompletedAtAndPuttingItBackClearsIt() {
+        Task task = task("x", TaskStatus.TODO, 1024);
+        givenTask(task);
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Task done = taskService.setDone("u1", "x", true);
+        assertThat(done.getStatus()).isEqualTo(TaskStatus.DONE);
         assertThat(done.getCompletedAt()).isEqualTo(NOW);
 
         givenTask(done);
-        givenColumn(TaskStatus.TODO);
-        assertThat(move("x", TaskStatus.TODO, null, null).getCompletedAt()).isNull();
+        Task undone = taskService.setDone("u1", "x", false);
+        assertThat(undone.getStatus()).isEqualTo(TaskStatus.TODO);
+        assertThat(undone.getCompletedAt()).isNull();
+    }
+
+    // --- Steps, the star and the note
+
+    @Test
+    void stepsAreKeptInOrderAndGivenIdsWhenTheyAreNew() {
+        givenTask(task("t1", TaskStatus.TODO, 1024));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Task saved = taskService.updateTask("u1", "t1", new TaskRequest("Essay", "2026-09-22", true, "  Due Friday  ",
+                List.of(new TaskRequest.TaskStepRequest(null, "  Find the references  ", true),
+                        new TaskRequest.TaskStepRequest("s2", "Write the intro", null))));
+
+        assertThat(saved.getSteps()).hasSize(2);
+        assertThat(saved.getSteps().get(0).getTitle()).isEqualTo("Find the references");
+        assertThat(saved.getSteps().get(0).getId()).isNotBlank();
+        assertThat(saved.getSteps().get(0).isDone()).isTrue();
+        assertThat(saved.getSteps().get(1).getId()).isEqualTo("s2");
+        assertThat(saved.getSteps().get(1).isDone()).isFalse();
+        assertThat(saved.isImportant()).isTrue();
+        assertThat(saved.getNote()).isEqualTo("Due Friday");
+    }
+
+    @Test
+    void aStepLeftOutOfTheRequestIsDeleted() {
+        Task existing = task("t1", TaskStatus.TODO, 1024);
+        existing.setSteps(new ArrayList<>(List.of(new TaskStep("s1", "One", false), new TaskStep("s2", "Two", false))));
+        givenTask(existing);
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Task saved = taskService.updateTask("u1", "t1", new TaskRequest("Essay", "2026-09-22", null, null,
+                List.of(new TaskRequest.TaskStepRequest("s2", "Two", false))));
+
+        assertThat(saved.getSteps()).hasSize(1);
+        assertThat(saved.getSteps().get(0).getId()).isEqualTo("s2");
+    }
+
+    @Test
+    void aBlankStepIsDroppedRatherThanSaved() {
+        givenTask(task("t1", TaskStatus.TODO, 1024));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Task saved = taskService.updateTask("u1", "t1", new TaskRequest("Essay", "2026-09-22", null, null,
+                List.of(new TaskRequest.TaskStepRequest(null, "   ", false),
+                        new TaskRequest.TaskStepRequest(null, "Real step", false))));
+
+        assertThat(saved.getSteps()).hasSize(1);
+        assertThat(saved.getSteps().get(0).getTitle()).isEqualTo("Real step");
+    }
+
+    @Test
+    void thereIsALimitOnHowManyStepsATaskCanHave() {
+        givenTask(task("t1", TaskStatus.TODO, 1024));
+        List<TaskRequest.TaskStepRequest> tooMany = new ArrayList<>();
+        for (int i = 0; i <= TaskService.MAX_STEPS; i++) {
+            tooMany.add(new TaskRequest.TaskStepRequest(null, "Step " + i, false));
+        }
+
+        Throwable thrown = catchThrowable(() -> taskService.updateTask("u1", "t1",
+                new TaskRequest("Essay", "2026-09-22", null, null, tooMany)));
+
+        assertThat(thrown).isInstanceOf(ApiException.class).hasMessageContaining("really two tasks");
+    }
+
+    @Test
+    void anOverlongNoteIsRefused() {
+        givenTask(task("t1", TaskStatus.TODO, 1024));
+
+        Throwable thrown = catchThrowable(() -> taskService.updateTask("u1", "t1",
+                new TaskRequest("Essay", "2026-09-22", null, "x".repeat(1001), null)));
+
+        assertThat(thrown).isInstanceOf(ApiException.class).hasMessageContaining("at most 1000");
+    }
+
+    // --- What the Today screen asks for
+
+    @Test
+    void everythingUpToTodayIsOneOpenEndedRange() {
+        // This is what stops an unfinished task disappearing the day after it was due:
+        // Today asks for everything dated up to and including today, not just today.
+        taskService.getTasks("u1", null, "2026-09-22");
+
+        verify(taskRepository).findByUserIdAndTaskDateBetween(eq("u1"),
+                eq(Range.leftUnbounded(Range.Bound.inclusive("2026-09-22"))), any(Sort.class));
     }
 
     @Test

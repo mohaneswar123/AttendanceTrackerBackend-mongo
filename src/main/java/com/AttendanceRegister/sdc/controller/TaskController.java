@@ -24,7 +24,7 @@ import com.AttendanceRegister.sdc.security.AccessGuard;
 import com.AttendanceRegister.sdc.service.TaskService;
 import com.AttendanceRegister.sdc.service.UserAuditService;
 
-// The signed-in student's Kanban tasks
+// The signed-in student's to-do list
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
@@ -55,7 +55,7 @@ public class TaskController {
         return ResponseEntity.ok(taskService.getTasks(userId, from, to));
     }
 
-    // ✅ Add a task to the bottom of To Do
+    // ✅ Add a task to the bottom of the list
     @PostMapping
     public ResponseEntity<Task> createTask(@AuthenticationPrincipal Jwt jwt, @RequestBody TaskRequest request) {
         String userId = accessGuard.requireActiveStudent(jwt).getId();
@@ -64,7 +64,7 @@ public class TaskController {
         return ResponseEntity.ok(task);
     }
 
-    // ✅ Edit title, date and priority
+    // ✅ Edit the title, the day, the star, the note and the steps
     @PutMapping("/{taskId}")
     public ResponseEntity<Task> updateTask(
             @AuthenticationPrincipal Jwt jwt,
@@ -77,7 +77,24 @@ public class TaskController {
         return ResponseEntity.ok(task);
     }
 
-    // ✅ Move to a column and/or a new place in it
+    // ✅ Tick a task off, or put it back. One tap, so it is its own call.
+    @PutMapping("/{taskId}/done")
+    public ResponseEntity<Task> markDone(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {
+        String userId = accessGuard.requireActiveStudent(jwt).getId();
+        Task task = taskService.setDone(userId, taskId, true);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(task);
+    }
+
+    @DeleteMapping("/{taskId}/done")
+    public ResponseEntity<Task> markNotDone(@AuthenticationPrincipal Jwt jwt, @PathVariable String taskId) {
+        String userId = accessGuard.requireActiveStudent(jwt).getId();
+        Task task = taskService.setDone(userId, taskId, false);
+        audited(userId, UserActionType.UPDATE);
+        return ResponseEntity.ok(task);
+    }
+
+    // ✅ Drag to a new place in the list
     @PutMapping("/{taskId}/move")
     public ResponseEntity<Task> moveTask(
             @AuthenticationPrincipal Jwt jwt,

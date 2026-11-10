@@ -7,7 +7,7 @@ endpoints, the rules the server enforces and where the code lives.
 |---|---|
 | [accounts.md](accounts.md) | Registration, login, tokens, subscriptions, admins, deleting an account |
 | [attendance.md](attendance.md) | Subjects, attendance records, percentages, the data reset |
-| [tasks.md](tasks.md) | The Kanban board: columns, ordering, dates, priorities |
+| [tasks.md](tasks.md) | The to-do list: steps, stars, ordering, dates |
 | [pomodoro.md](pomodoro.md) | The focus timer, which runs on the server |
 | [calendar.md](calendar.md) | Dated events and reminders |
 | [timetable.md](timetable.md) | Reusable weekly routines grouped into modes |

@@ -1,6 +1,8 @@
 package com.AttendanceRegister.sdc.model;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -20,10 +22,23 @@ public class Task {
 
     private TaskStatus status;
 
-    // null when the student didn't pick one
+    /**
+     * From when this was a Kanban board. Nothing sets it any more; it stays so the one
+     * thing it was used for, marking a task as worth doing first, can still be read back
+     * as {@code important} for tasks saved before the star existed.
+     */
     private TaskPriority priority;
 
-    // Order within its column; smaller comes first
+    /** Starred, so it sits at the top and appears under Important */
+    private Boolean important;
+
+    /** Anything that does not fit in the title: a link, a page number, a reminder why */
+    private String note;
+
+    /** Checkable steps within the task, in the order the student put them */
+    private List<TaskStep> steps = new ArrayList<>();
+
+    // Order in the list; smaller comes first
     private double position;
 
     private Instant createdAt;
@@ -73,6 +88,39 @@ public class Task {
 
     public void setStatus(TaskStatus status) {
         this.status = status;
+    }
+
+    /**
+     * Starred or not. Tasks saved before the star existed fall back to whether they were
+     * marked high priority, which is the same idea under the old name.
+     */
+    public boolean isImportant() {
+        return important != null ? important : priority == TaskPriority.HIGH;
+    }
+
+    public void setImportant(boolean important) {
+        this.important = important;
+    }
+
+    public String getNote() {
+        return note;
+    }
+
+    public void setNote(String note) {
+        this.note = note;
+    }
+
+    public List<TaskStep> getSteps() {
+        return steps;
+    }
+
+    public void setSteps(List<TaskStep> steps) {
+        this.steps = steps == null ? new ArrayList<>() : steps;
+    }
+
+    /** True once the task has been ticked off */
+    public boolean isDone() {
+        return status == TaskStatus.DONE;
     }
 
     public TaskPriority getPriority() {
