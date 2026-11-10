@@ -14,6 +14,13 @@ public class Subject {
     // Reference by ID instead of relational mapping
     private String userId;
 
+    /**
+     * The colour the student gave this subject, or null for one saved before colours
+     * existed. The page falls back to a colour worked out from the name, which is what it
+     * did for every subject before this field.
+     */
+    private TimetableColor color;
+
     // 👉 Constructors
     public Subject() {}
 
@@ -37,6 +44,14 @@ public class Subject {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public TimetableColor getColor() {
+        return color;
+    }
+
+    public void setColor(TimetableColor color) {
+        this.color = color;
     }
 
     public String getUserId() {

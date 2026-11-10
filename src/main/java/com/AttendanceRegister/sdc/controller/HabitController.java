@@ -17,9 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.AttendanceRegister.sdc.dto.HabitEntryRequest;
 import com.AttendanceRegister.sdc.dto.HabitEntryResponse;
+import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
 import com.AttendanceRegister.sdc.dto.HabitSummaryResponse;
+import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.UserActionFeature;
 import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
@@ -64,6 +66,24 @@ public class HabitController {
     @GetMapping("/summary")
     public ResponseEntity<HabitSummaryResponse> summary(@AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(habitService.weeklySummary(studentId(jwt)));
+    }
+
+    /**
+     * How the habits went this week, this month or this year. Anything other than those
+     * three is a mistake worth saying out loud rather than quietly answering for a week.
+     */
+    @GetMapping("/progress")
+    public ResponseEntity<HabitProgressResponse> progress(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "WEEK") String range) {
+
+        HabitService.ProgressRange chosen;
+        try {
+            chosen = HabitService.ProgressRange.valueOf(range.trim().toUpperCase());
+        } catch (IllegalArgumentException invalid) {
+            throw ApiException.badRequest("Range must be WEEK, MONTH or YEAR");
+        }
+        return ResponseEntity.ok(habitService.progress(studentId(jwt), chosen));
     }
 
     @PostMapping

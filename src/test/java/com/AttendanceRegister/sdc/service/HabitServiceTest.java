@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatus;
 import com.AttendanceRegister.sdc.Repository.HabitEntryRepository;
 import com.AttendanceRegister.sdc.Repository.HabitRepository;
 import com.AttendanceRegister.sdc.dto.HabitEntryRequest;
+import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
 import com.AttendanceRegister.sdc.dto.HabitSummaryResponse;
@@ -42,6 +43,7 @@ import com.AttendanceRegister.sdc.model.HabitEntryStatus;
 import com.AttendanceRegister.sdc.model.HabitGoal;
 import com.AttendanceRegister.sdc.model.HabitSchedule;
 import com.AttendanceRegister.sdc.model.TimetableColor;
+import com.AttendanceRegister.sdc.service.HabitService.ProgressRange;
 
 @ExtendWith(MockitoExtension.class)
 class HabitServiceTest {
@@ -655,5 +657,245 @@ class HabitServiceTest {
         lenient().when(entryRepository.findByUserId(USER)).thenReturn(List.of());
 
         assertThat(service.weeklySummary(USER).suggestion()).contains("Add a habit");
+    }
+
+    // --- Progress over a week, a month and a year
+
+    private HabitProgressResponse progress(Habit habit, List<HabitEntry> entries, ProgressRange range) {
+        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(habit));
+        when(entryRepository.findByUserId(USER)).thenReturn(entries);
+        return service.progress(USER, range);
+    }
+
+    @Test
+    void theWeekRangeStartsOnMondayAndIsCutIntoSevenDays() {
+        // TODAY is a Wednesday, so Monday and Tuesday are behind it
+        HabitProgressResponse week = progress(habit(HabitSchedule.DAILY),
+                days(HabitEntryStatus.DONE, 0, 1, 2), ProgressRange.WEEK);
+
+        assertThat(week.from()).isEqualTo(TODAY.minusDays(2).toString());
+        assertThat(week.to()).isEqualTo(TODAY.toString());
+        assertThat(week.buckets()).hasSize(7);
+        assertThat(week.buckets().get(0).label()).isEqualTo("Mon");
+        assertThat(week.done()).isEqualTo(3);
+        assertThat(week.rate()).isEqualTo(100);
+    }
+
+    @Test
+    void daysStillToComeAreInTheWeekButAskForNothing() {
+        HabitProgressResponse week = progress(habit(HabitSchedule.DAILY),
+                days(HabitEntryStatus.DONE, 0, 1, 2), ProgressRange.WEEK);
+
+        // Thursday onward: drawn, so the week reads as a week, but not counted against anyone
+        assertThat(week.buckets().subList(3, 7))
+                .allSatisfy(bucket -> {
+                    assertThat(bucket.due()).isZero();
+                    assertThat(bucket.rate()).isEqualTo(-1);
+                });
+    }
+
+    @Test
+    void aMonthIsCutIntoWeeksAndAYearIntoMonths() {
+        Habit daily = habit(HabitSchedule.DAILY);
+        List<HabitEntry> entries = days(HabitEntryStatus.DONE, 0, 1, 2);
+
+        assertThat(progress(daily, entries, ProgressRange.MONTH).buckets())
+                .extracting(HabitProgressResponse.Bucket::label)
+                .startsWith("Week 1", "Week 2");
+        assertThat(progress(daily, entries, ProgressRange.YEAR).buckets())
+                .hasSize(12)
+                .extracting(HabitProgressResponse.Bucket::label)
+                .startsWith("Jan")
+                .endsWith("Dec");
+    }
+
+    @Test
+    void theMonthStartsOnTheFirstAndTheYearOnTheFirstOfJanuary() {
+        Habit daily = habit(HabitSchedule.DAILY);
+        List<HabitEntry> entries = days(HabitEntryStatus.DONE, 0);
+
+        assertThat(progress(daily, entries, ProgressRange.MONTH).from())
+                .isEqualTo(TODAY.withDayOfMonth(1).toString());
+        assertThat(progress(daily, entries, ProgressRange.YEAR).from())
+                .isEqualTo(TODAY.withDayOfYear(1).toString());
+    }
+
+    /**
+     * The reason the sum is done week by week rather than over the whole stretch at once.
+     * Three a week owes three for each week that has closed, not three for the month.
+     */
+    @Test
+    void aTimesPerWeekHabitOwesItsTargetEveryWeekOfTheRange() {
+        Habit threeAWeek = habit(HabitSchedule.TIMES_PER_WEEK);
+        threeAWeek.setTimesPerWeek(3);
+        // November 2026 starts on a Sunday, and TODAY is Wednesday the 11th, so the month so
+        // far touches three Monday weeks: the 1st on its own, the 2nd to the 8th, and the
+        // 9th to the 11th. Three a week over three weeks is nine owed.
+        HabitProgressResponse month = progress(threeAWeek,
+                days(HabitEntryStatus.DONE, 0, 1, 2, 7, 8, 9), ProgressRange.MONTH);
+
+        assertThat(month.due()).isEqualTo(9);
+        // Three in the week of the 9th and three in the week of the 2nd; the 1st had none
+        assertThat(month.done()).isEqualTo(6);
+        assertThat(month.rate()).isEqualTo(67);
+    }
+
+    /**
+     * The same marks over the same days, read as a week instead of a month, owe three
+     * rather than nine. The target follows the stretch being asked about.
+     */
+    @Test
+    void theSameHabitOwesLessOverAShorterStretch() {
+        Habit threeAWeek = habit(HabitSchedule.TIMES_PER_WEEK);
+        threeAWeek.setTimesPerWeek(3);
+        HabitProgressResponse week = progress(threeAWeek,
+                days(HabitEntryStatus.DONE, 0, 1, 2, 7, 8, 9), ProgressRange.WEEK);
+
+        assertThat(week.due()).isEqualTo(3);
+        assertThat(week.done()).isEqualTo(3);
+    }
+
+    @Test
+    void aSkippedDayLeavesTheSumRatherThanCountingAgainstTheStudent() {
+        HabitProgressResponse week = progress(habit(HabitSchedule.DAILY),
+                List.of(entry(TODAY, HabitEntryStatus.DONE),
+                        entry(TODAY.minusDays(1), HabitEntryStatus.SKIPPED),
+                        entry(TODAY.minusDays(2), HabitEntryStatus.DONE)),
+                ProgressRange.WEEK);
+
+        assertThat(week.done()).isEqualTo(2);
+        assertThat(week.due()).isEqualTo(2);
+        assertThat(week.rate()).isEqualTo(100);
+    }
+
+    @Test
+    void nothingDueReadsAsMinusOneRatherThanZeroPerCent() {
+        // CUSTOM_DAYS is the schedule that reads the chosen days; WEEKDAYS is always Mon-Fri
+        Habit onFridays = habit(HabitSchedule.CUSTOM_DAYS);
+        onFridays.setWeekdays(Set.of(DayOfWeek.FRIDAY));
+        // TODAY is a Wednesday, so this week's Friday has not happened yet
+        HabitProgressResponse week = progress(onFridays, List.of(), ProgressRange.WEEK);
+
+        assertThat(week.due()).isZero();
+        assertThat(week.rate()).isEqualTo(-1);
+    }
+
+    @Test
+    void theHabitsAreListedWorstFirstSoWhatNeedsAttentionIsOnTop() {
+        Habit kept = habit(HabitSchedule.DAILY);
+        Habit slipping = habit(HabitSchedule.DAILY);
+        slipping.setId("h2");
+        slipping.setName("Run");
+        List<HabitEntry> entries = new ArrayList<>(days(HabitEntryStatus.DONE, 0, 1, 2));
+        // "Run" was only done one of the three days
+        HabitEntry ranOnce = new HabitEntry(USER, "h2", TODAY, NOW);
+        ranOnce.setStatus(HabitEntryStatus.DONE);
+        entries.add(ranOnce);
+
+        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(kept, slipping));
+        when(entryRepository.findByUserId(USER)).thenReturn(entries);
+
+        HabitProgressResponse week = service.progress(USER, ProgressRange.WEEK);
+
+        assertThat(week.habits()).extracting(HabitProgressResponse.HabitFigures::name)
+                .containsExactly("Run", "Revise notes");
+        assertThat(week.habits().get(0).rate()).isLessThan(week.habits().get(1).rate());
+    }
+
+    /**
+     * A year started in January but the habit started in November. Billing the habit for
+     * the ten months it did not exist would report 1% to a student who has kept it every
+     * day since they made it.
+     */
+    @Test
+    void aHabitOwesNothingForTheTimeBeforeItExisted() {
+        Habit madeYesterday = habit(HabitSchedule.DAILY);
+        madeYesterday.setCreatedAt(TODAY.minusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
+        madeYesterday.setStartDate(TODAY.minusDays(1));
+
+        HabitProgressResponse year = progress(madeYesterday,
+                days(HabitEntryStatus.DONE, 0, 1), ProgressRange.YEAR);
+
+        assertThat(year.due()).isEqualTo(2);
+        assertThat(year.done()).isEqualTo(2);
+        assertThat(year.rate()).isEqualTo(100);
+    }
+
+    @Test
+    void aDaySizedPieceLeavesOutTheTimesPerWeekHabitsAndSaysSo() {
+        Habit daily = habit(HabitSchedule.DAILY);
+        Habit threeAWeek = habit(HabitSchedule.TIMES_PER_WEEK);
+        threeAWeek.setId("h2");
+        threeAWeek.setName("Gym");
+        threeAWeek.setTimesPerWeek(3);
+
+        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(daily, threeAWeek));
+        when(entryRepository.findByUserId(USER)).thenReturn(days(HabitEntryStatus.DONE, 0, 1, 2));
+
+        HabitProgressResponse week = service.progress(USER, ProgressRange.WEEK);
+
+        // Monday owed one thing, the daily habit, not one plus a whole week of gym
+        assertThat(week.buckets().get(0).due()).isEqualTo(1);
+        assertThat(week.buckets().get(0).rate()).isEqualTo(100);
+        assertThat(week.bucketNote()).contains("times a week");
+        // The headline still counts both: three days of revision, and three gym sessions owed
+        assertThat(week.due()).isEqualTo(6);
+        assertThat(week.habits()).hasSize(2);
+    }
+
+    @Test
+    void thereIsNoNoteWhenEveryHabitFitsThePieces() {
+        HabitProgressResponse week = progress(habit(HabitSchedule.DAILY),
+                days(HabitEntryStatus.DONE, 0), ProgressRange.WEEK);
+
+        assertThat(week.bucketNote()).isNull();
+    }
+
+    /**
+     * The month's pieces are whole Monday weeks clipped to the month, so they add up to the
+     * month's own figure. That is the reason they are not simply "the 1st to the 7th": a
+     * seven-day block starting on the 1st straddles two weeks, and a "3 times a week" habit
+     * would then be charged its three twice for the one piece.
+     */
+    @Test
+    void theMonthsPiecesAddUpToTheMonth() {
+        Habit daily = habit(HabitSchedule.DAILY);
+        Habit threeAWeek = habit(HabitSchedule.TIMES_PER_WEEK);
+        threeAWeek.setId("h2");
+        threeAWeek.setTimesPerWeek(3);
+
+        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(daily, threeAWeek));
+        when(entryRepository.findByUserId(USER)).thenReturn(days(HabitEntryStatus.DONE, 0, 1, 2));
+
+        HabitProgressResponse month = service.progress(USER, ProgressRange.MONTH);
+
+        assertThat(month.bucketNote()).isNull();
+        assertThat(month.buckets().stream().mapToInt(HabitProgressResponse.Bucket::due).sum())
+                .isEqualTo(month.due());
+        assertThat(month.buckets().stream().mapToInt(HabitProgressResponse.Bucket::done).sum())
+                .isEqualTo(month.done());
+    }
+
+    @Test
+    void piecesThatHaveNotHappenedYetAskForNothing() {
+        HabitProgressResponse year = progress(habit(HabitSchedule.DAILY),
+                days(HabitEntryStatus.DONE, 0), ProgressRange.YEAR);
+
+        // TODAY is in November, so December is drawn but owes nothing
+        assertThat(year.buckets()).hasSize(12);
+        assertThat(year.buckets().get(11).label()).isEqualTo("Dec");
+        assertThat(year.buckets().get(11).due()).isZero();
+        assertThat(year.buckets().get(11).rate()).isEqualTo(-1);
+    }
+
+    @Test
+    void archivedHabitsAreLeftOutOfProgress() {
+        Habit archived = habit(HabitSchedule.DAILY);
+        archived.setArchived(true);
+
+        HabitProgressResponse week = progress(archived, days(HabitEntryStatus.DONE, 0), ProgressRange.WEEK);
+
+        assertThat(week.habits()).isEmpty();
+        assertThat(week.due()).isZero();
     }
 }

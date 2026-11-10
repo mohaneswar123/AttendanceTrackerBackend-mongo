@@ -19,6 +19,12 @@ public class CalendarEvent {
 
     private CalendarEventType type;
 
+    /**
+     * What the entry is about. Null for entries saved before categories existed; the page
+     * falls back to showing them as it always did.
+     */
+    private CalendarEventCategory category;
+
     // "YYYY-MM-DD" in the calendar time zone; the day the entry is shown on
     private String eventDate;
 
@@ -66,6 +72,14 @@ public class CalendarEvent {
 
     public void setType(CalendarEventType type) {
         this.type = type;
+    }
+
+    public CalendarEventCategory getCategory() {
+        return category;
+    }
+
+    public void setCategory(CalendarEventCategory category) {
+        this.category = category;
     }
 
     public String getEventDate() {

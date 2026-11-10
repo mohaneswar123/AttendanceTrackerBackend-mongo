@@ -9,11 +9,15 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.AttendanceRegister.sdc.dto.SubjectRequest;
 import com.AttendanceRegister.sdc.model.Subject;
+import com.AttendanceRegister.sdc.model.TimetableColor;
 import com.AttendanceRegister.sdc.model.UserActionFeature;
 import com.AttendanceRegister.sdc.model.UserActionType;
 import com.AttendanceRegister.sdc.security.AccessGuard;
@@ -39,11 +43,26 @@ public class SubjectController {
     public ResponseEntity<Subject> addSubject(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam String userId,
-            @RequestParam String name) {
+            @RequestParam String name,
+            @RequestParam(required = false) TimetableColor color) {
 
         accessGuard.requireActiveSelfOrAdmin(jwt, userId);
-        Subject subject = subjectService.addSubject(userId, name);
+        Subject subject = subjectService.addSubject(userId, name, color);
         audit.record(userId, UserActionFeature.SUBJECT, UserActionType.CREATE, accessGuard.isAdmin(jwt));
+        return ResponseEntity.ok(subject);
+    }
+
+    // ✅ Rename a subject, recolour it, or both
+    @PutMapping("/{subjectId}/user/{userId}")
+    public ResponseEntity<Subject> updateSubject(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable String subjectId,
+            @PathVariable String userId,
+            @RequestBody SubjectRequest request) {
+
+        accessGuard.requireActiveSelfOrAdmin(jwt, userId);
+        Subject subject = subjectService.updateSubject(subjectId, userId, request.name(), request.color());
+        audit.record(userId, UserActionFeature.SUBJECT, UserActionType.UPDATE, accessGuard.isAdmin(jwt));
         return ResponseEntity.ok(subject);
     }
 
