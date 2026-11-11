@@ -108,10 +108,10 @@ class UserServiceTest {
     void registerStoresHashedPasswordAndStartsActive() {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User saved = userService.registerUser(registration("secret1"));
+        User saved = userService.registerUser(registration("secret123"));
 
-        assertThat(saved.getPassword()).isNotEqualTo("secret1");
-        assertThat(passwordHasher.matches("secret1", saved.getPassword())).isTrue();
+        assertThat(saved.getPassword()).isNotEqualTo("secret123");
+        assertThat(passwordHasher.matches("secret123", saved.getPassword())).isTrue();
         assertThat(saved.isActive()).isTrue();
         assertThat(saved.getPaidTill()).isAfter(LocalDate.now());
     }
@@ -120,8 +120,8 @@ class UserServiceTest {
     void registerAllowsNameUsedByAnotherStudent() {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        User first = userService.registerUser(registration("secret1"));
-        RegisterRequest sameName = registration("secret2");
+        User first = userService.registerUser(registration("secret123"));
+        RegisterRequest sameName = registration("secret234");
         sameName.setEmail("asha.k@example.com");
         User second = userService.registerUser(sameName);
 
@@ -133,7 +133,7 @@ class UserServiceTest {
         when(userRepository.existsByEmail("asha@example.com")).thenReturn(true);
 
         Throwable thrown = catchThrowable(
-                () -> userService.registerUser(registration("secret1")));
+                () -> userService.registerUser(registration("secret123")));
 
         assertApiError(thrown, HttpStatus.CONFLICT, "EMAIL_EXISTS");
         verify(userRepository, never()).save(any());
@@ -148,24 +148,45 @@ class UserServiceTest {
     }
 
     @Test
-    void loginAcceptsHashedPassword() {
-        User stored = user(passwordHasher.hash("secret1"), true, LocalDate.now().plusDays(10));
+    void registerRejectsAPasswordShorterThanTheFormPromises() {
+        // The sign-up form states the minimum before the student types; the server has to
+        // mean it, or the rule is only a sentence on a page
+        Throwable thrown = catchThrowable(
+                () -> userService.registerUser(registration("short12")));
+
+        assertApiError(thrown, HttpStatus.BAD_REQUEST, "BAD_REQUEST");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void signingInIsNotHeldToTheMinimum() {
+        // An account made before the rule existed must still be able to get in and change
+        // its password, so only the paths that set one are checked
+        User stored = user(passwordHasher.hash("old"), true, LocalDate.now().plusDays(10));
         when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
 
-        assertThat(userService.validateLogin("asha@example.com", "secret1")).isSameAs(stored);
+        assertThat(userService.validateLogin("asha@example.com", "old")).isSameAs(stored);
+    }
+
+    @Test
+    void loginAcceptsHashedPassword() {
+        User stored = user(passwordHasher.hash("secret123"), true, LocalDate.now().plusDays(10));
+        when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
+
+        assertThat(userService.validateLogin("asha@example.com", "secret123")).isSameAs(stored);
     }
 
     @Test
     void loginAcceptsPasswordStoredBeforeHashing() {
-        User stored = user("secret1", true, LocalDate.now().plusDays(10));
+        User stored = user("secret123", true, LocalDate.now().plusDays(10));
         when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
 
-        assertThat(userService.validateLogin("asha@example.com", "secret1")).isSameAs(stored);
+        assertThat(userService.validateLogin("asha@example.com", "secret123")).isSameAs(stored);
     }
 
     @Test
     void loginRejectsWrongPassword() {
-        User stored = user(passwordHasher.hash("secret1"), true, LocalDate.now().plusDays(10));
+        User stored = user(passwordHasher.hash("secret123"), true, LocalDate.now().plusDays(10));
         when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
 
         Throwable thrown = catchThrowable(
@@ -176,11 +197,11 @@ class UserServiceTest {
 
     @Test
     void loginRejectsExpiredSubscriptionAndMarksUserInactive() {
-        User stored = user(passwordHasher.hash("secret1"), true, LocalDate.now().minusDays(1));
+        User stored = user(passwordHasher.hash("secret123"), true, LocalDate.now().minusDays(1));
         when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
 
         Throwable thrown = catchThrowable(
-                () -> userService.validateLogin("asha@example.com", "secret1"));
+                () -> userService.validateLogin("asha@example.com", "secret123"));
 
         assertApiError(thrown, HttpStatus.FORBIDDEN, "SUBSCRIPTION_EXPIRED");
         assertThat(stored.isActive()).isFalse();
@@ -189,21 +210,21 @@ class UserServiceTest {
 
     @Test
     void loginRejectsDeactivatedUser() {
-        User stored = user(passwordHasher.hash("secret1"), false, LocalDate.now().plusDays(10));
+        User stored = user(passwordHasher.hash("secret123"), false, LocalDate.now().plusDays(10));
         when(userRepository.findByEmail("asha@example.com")).thenReturn(stored);
 
         Throwable thrown = catchThrowable(
-                () -> userService.validateLogin("asha@example.com", "secret1"));
+                () -> userService.validateLogin("asha@example.com", "secret123"));
 
         assertApiError(thrown, HttpStatus.FORBIDDEN, "SUBSCRIPTION_INACTIVE");
     }
 
     @Test
     void changePasswordRequiresCurrentPassword() {
-        User stored = user(passwordHasher.hash("secret1"), true, LocalDate.now().plusDays(10));
+        User stored = user(passwordHasher.hash("secret123"), true, LocalDate.now().plusDays(10));
 
         Throwable thrown = catchThrowable(
-                () -> userService.changePassword(stored, "wrong", "secret2"));
+                () -> userService.changePassword(stored, "wrong", "secret234"));
 
         assertApiError(thrown, HttpStatus.BAD_REQUEST, "WRONG_PASSWORD");
         verify(userRepository, never()).save(any());
@@ -211,11 +232,11 @@ class UserServiceTest {
 
     @Test
     void changePasswordStoresNewHash() {
-        User stored = user(passwordHasher.hash("secret1"), true, LocalDate.now().plusDays(10));
+        User stored = user(passwordHasher.hash("secret123"), true, LocalDate.now().plusDays(10));
 
-        userService.changePassword(stored, "secret1", "secret2");
+        userService.changePassword(stored, "secret123", "secret234");
 
-        assertThat(passwordHasher.matches("secret2", stored.getPassword())).isTrue();
+        assertThat(passwordHasher.matches("secret234", stored.getPassword())).isTrue();
         verify(userRepository).save(stored);
     }
 
