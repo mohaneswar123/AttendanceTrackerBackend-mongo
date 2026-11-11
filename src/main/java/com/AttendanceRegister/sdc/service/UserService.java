@@ -24,6 +24,9 @@ import com.AttendanceRegister.sdc.security.PasswordHasher;
 @Service
 public class UserService {
 
+    /** Kept in step with MIN_PASSWORD on the sign-up form */
+    public static final int MIN_PASSWORD_LENGTH = 8;
+
     private final UserRepository userRepository;
     private final PasswordHasher passwordHasher;
     private final ResetService resetService;
@@ -91,6 +94,7 @@ public class UserService {
         if (username == null || email == null) {
             throw ApiException.badRequest("Name and email are required");
         }
+        requireUsablePassword(request.getPassword());
         String passwordHash = passwordHasher.hash(request.getPassword());
 
         // Names needn't be unique; accounts are told apart by email
@@ -109,13 +113,27 @@ public class UserService {
         if (!passwordHasher.matches(oldPassword, user.getPassword())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "WRONG_PASSWORD", "Old password is incorrect");
         }
+        requireUsablePassword(newPassword);
         user.setPassword(passwordHasher.hash(newPassword));
         userRepository.save(user);
+    }
+
+    /**
+     * The sign-up form states this minimum, so the server has to mean it: a rule written
+     * only on the page is not a rule. Sign-in is deliberately exempt, because an existing
+     * account with a shorter password must still be able to get in and change it.
+     */
+    private static void requireUsablePassword(String password) {
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH) {
+            throw ApiException.badRequest(
+                    "Use at least " + MIN_PASSWORD_LENGTH + " characters for your password");
+        }
     }
 
     // Admin: replaces a user's password, e.g. when they have forgotten it
     public void setPassword(String userId, String newPassword) {
         User user = getUserById(userId);
+        requireUsablePassword(newPassword);
         user.setPassword(passwordHasher.hash(newPassword));
         userRepository.save(user);
     }
