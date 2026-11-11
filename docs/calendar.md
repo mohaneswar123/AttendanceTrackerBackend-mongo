@@ -39,9 +39,10 @@ day.
 
 ## Time zone
 
-Set by `CALENDAR_TIME_ZONE` (`app.calendar.time-zone`), `Asia/Kolkata` by default. **Every
-student sees the same zone** — this is a study app used in one place, not a scheduler
-across time zones.
+Set by `app.time-zone` (`APP_TIME_ZONE`, or the older `CALENDAR_TIME_ZONE`), `Asia/Kolkata`
+by default, and shared with the rest of the app — see [README.md](README.md#time-zone).
+**Every student sees the same zone**: this is a study app used in one place, not a
+scheduler across time zones.
 
 Three decisions keep the dates honest:
 

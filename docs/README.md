@@ -13,6 +13,24 @@ endpoints, the rules the server enforces and where the code lives.
 | [timetable.md](timetable.md) | Reusable weekly routines grouped into modes |
 | [habits.md](habits.md) | Habits, the three states, streaks and the week in review |
 
+
+## Time zone
+
+Everything in the app runs on one zone: `app.time-zone`, `Asia/Kolkata` by default
+(`APP_TIME_ZONE`, or the older `CALENDAR_TIME_ZONE`). Almost every date here is a day in a
+student's life — whether a habit is due today, which day focus minutes belong to, what date
+a calendar entry falls on — and those days run on the students' clock, not the server's.
+
+`config/TimeConfig.java` sets it in two places from that one property: the `Clock` bean
+that services inject, and the JVM's own default, so a plain `LocalDate.now()` anywhere —
+including code written later that forgets the clock — still means the same day as
+everything else. A zone that is not a real zone stops the app at startup.
+
+This is not cosmetic. On a host running in UTC, a student in India who opened the app after
+midnight was shown the previous day, and marking a habit was refused with "You cannot mark a
+day that has not happened yet" — the day had happened, just not in UTC. The frontend reads
+its clock through `utils/date.js`, in the same zone, so the two always agree on today.
+
 ## Shared ground
 
 **Everything below the surface is the same across features**, so it isn't repeated in each

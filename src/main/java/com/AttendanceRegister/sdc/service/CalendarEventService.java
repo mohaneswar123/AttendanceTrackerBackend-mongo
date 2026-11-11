@@ -28,7 +28,7 @@ import com.AttendanceRegister.sdc.model.CalendarEvent;
 import com.AttendanceRegister.sdc.util.Dates;
 
 // Students' calendar entries. Dates and times are read and shown in one configured time
-// zone (app.calendar.time-zone), never the server's own.
+// zone (app.time-zone), never the server's own.
 @Service
 public class CalendarEventService {
 
@@ -47,7 +47,7 @@ public class CalendarEventService {
     public CalendarEventService(CalendarEventRepository repository,
                                 MongoTemplate mongoTemplate,
                                 Clock clock,
-                                @Value("${app.calendar.time-zone:Asia/Kolkata}") String timeZone) {
+                                @Value("${app.time-zone:Asia/Kolkata}") String timeZone) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.clock = clock;
@@ -60,7 +60,7 @@ public class CalendarEventService {
             return ZoneId.of(timeZone);
         } catch (DateTimeException | NullPointerException ex) {
             throw new IllegalStateException(
-                    "app.calendar.time-zone must be a time zone id such as Asia/Kolkata, not '" + timeZone + "'", ex);
+                    "app.time-zone must be a time zone id such as Asia/Kolkata, not '" + timeZone + "'", ex);
         }
     }
 

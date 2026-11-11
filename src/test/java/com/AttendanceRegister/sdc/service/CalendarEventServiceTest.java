@@ -220,7 +220,7 @@ class CalendarEventServiceTest {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
         assertThatThrownBy(() -> new CalendarEventService(repository, mongoTemplate, clock, "Mars/Olympus"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("app.calendar.time-zone");
+                .hasMessageContaining("app.time-zone");
     }
 
     // --- Ownership, update and delete
