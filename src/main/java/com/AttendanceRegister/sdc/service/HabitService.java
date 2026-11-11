@@ -28,7 +28,6 @@ import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitEntryResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
-import com.AttendanceRegister.sdc.dto.HabitSummaryResponse;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.Habit;
 import com.AttendanceRegister.sdc.model.HabitEntry;
@@ -233,23 +232,12 @@ public class HabitService {
 
         int done = 0;
         int due = 0;
-        List<HabitProgressResponse.HabitFigures> perHabit = new ArrayList<>();
         for (Habit habit : habits) {
             Map<LocalDate, HabitEntry> entries = byHabit.getOrDefault(habit.getId(), Map.of());
             Week figures = rangeFigures(habit, entries, from, today, now);
             done += figures.done();
             due += figures.due();
-            perHabit.add(new HabitProgressResponse.HabitFigures(
-                    habit.getId(), habit.getName(), habit.getIcon(),
-                    figures.done(), figures.due(),
-                    figures.due() > 0 ? percentage(figures.done(), figures.due()) : -1));
         }
-
-        // Worst first, and habits with nothing due last: the point of the screen is what
-        // needs attention, not an alphabet
-        perHabit.sort(Comparator
-                .comparingInt((HabitProgressResponse.HabitFigures f) -> f.rate() < 0 ? 1 : 0)
-                .thenComparingInt(HabitProgressResponse.HabitFigures::rate));
 
         // A day-long piece cannot judge "3 times a week", so those habits sit out the week's
         // day-sized pieces. The headline above still counts every habit.
@@ -266,8 +254,7 @@ public class HabitService {
                 range.name(), from.toString(), today.toString(),
                 done, due, due > 0 ? percentage(done, due) : -1,
                 buckets(range, inPieces, byHabit, from, today, now),
-                note,
-                perHabit);
+                note);
     }
 
     /** The stretch cut into pieces, each piece carrying its own figures */
@@ -357,96 +344,6 @@ public class HabitService {
             due += figures.due();
         }
         return new Week(done, due);
-    }
-
-    // --- The week in review
-
-    /**
-     * The week that has just finished, for the panel shown from Sunday onward. Archived
-     * habits are left out, because there is nothing to act on there.
-     */
-    public HabitSummaryResponse weeklySummary(String userId) {
-        LocalDate lastWeekStart = weekStart(today()).minusWeeks(1);
-        LocalDate lastWeekEnd = lastWeekStart.plusDays(6);
-
-        List<Habit> habits = habitRepository.findByUserIdOrderByPositionAsc(userId).stream()
-                .filter(habit -> !habit.isArchived())
-                .toList();
-        Map<String, Map<LocalDate, HabitEntry>> byHabit = entriesByHabit(userId);
-
-        String bestName = null;
-        int bestRate = -1;
-        String slippedName = null;
-        int slippedRate = -1;
-        Habit slipped = null;
-        int doneTotal = 0;
-        int dueTotal = 0;
-
-        for (Habit habit : habits) {
-            Week week = weekFigures(habit, byHabit.getOrDefault(habit.getId(), Map.of()),
-                    lastWeekStart, lastWeekEnd, now());
-            if (week.due() <= 0) {
-                continue;
-            }
-            doneTotal += week.done();
-            dueTotal += week.due();
-            int rate = percentage(week.done(), week.due());
-            if (rate > bestRate) {
-                bestRate = rate;
-                bestName = habit.getName();
-            }
-            if (rate < 100 && (slippedRate < 0 || rate < slippedRate)) {
-                slippedRate = rate;
-                slippedName = habit.getName();
-                slipped = habit;
-            }
-        }
-
-        return new HabitSummaryResponse(
-                lastWeekStart.toString(),
-                lastWeekEnd.toString(),
-                dueTotal > 0 ? percentage(doneTotal, dueTotal) : -1,
-                bestName,
-                Math.max(bestRate, 0),
-                slippedName,
-                Math.max(slippedRate, 0),
-                suggestion(habits, slipped, slippedRate, dueTotal));
-    }
-
-    /**
-     * One thing worth trying next week, chosen by rule rather than guesswork, and always
-     * about making the habit easier to keep rather than telling the student off.
-     */
-    private static String suggestion(List<Habit> habits, Habit slipped, int slippedRate, int dueTotal) {
-        if (habits.isEmpty()) {
-            return "Add a habit or two, and last week's figures will appear here.";
-        }
-        if (dueTotal == 0) {
-            return "Nothing was due last week. Check which days each habit is set to run on.";
-        }
-        if (slipped == null) {
-            return "Everything you planned got done. This is a good week to add one more habit.";
-        }
-        if (slipped.getReminderTime() == null) {
-            return quoted(slipped) + " has no reminder time. Giving it one makes it easier to remember.";
-        }
-        if (slippedRate >= 70) {
-            return quoted(slipped) + " was close. One more day would have finished the week.";
-        }
-        return switch (slipped.getSchedule()) {
-            case DAILY -> quoted(slipped)
-                    + " every day may be a lot to start with. Three days a week is easier to keep.";
-            case WEEKDAYS -> quoted(slipped)
-                    + " runs every weekday. Picking three days instead is easier to keep.";
-            case CUSTOM_DAYS -> quoted(slipped) + " is set for " + slipped.getWeekdays().size()
-                    + " days a week. Dropping one makes the rest more likely to happen.";
-            case TIMES_PER_WEEK -> quoted(slipped) + " is set to " + slipped.getTimesPerWeek()
-                    + " times a week. Try " + Math.max(1, slipped.getTimesPerWeek() - 1) + " and build back up.";
-        };
-    }
-
-    private static String quoted(Habit habit) {
-        return "\"" + habit.getName() + "\"";
     }
 
     // --- Working out the figures

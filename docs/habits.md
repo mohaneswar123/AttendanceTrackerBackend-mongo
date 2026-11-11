@@ -42,7 +42,6 @@ answers 404, the same as one that does not exist.
 |---|---|
 | `GET /api/habits?includeArchived=` | Every habit with its figures worked out |
 | `GET /api/habits/entries?from=&to=` | The marked days in a range, for the grid |
-| `GET /api/habits/summary` | Last week in review, with one suggestion |
 | `GET /api/habits/progress?range=WEEK\|MONTH\|YEAR` | How the habits went over that stretch — see below. Anything else is 400. |
 | `POST /api/habits` | Create |
 | `PUT /api/habits/{id}` | Edit |
@@ -53,11 +52,11 @@ answers 404, the same as one that does not exist.
 
 ## Progress over a week, a month or a year
 
-`GET /api/habits/progress` answers with one headline figure, the same stretch cut into
-pieces, and the stretch per habit:
+`GET /api/habits/progress` answers with one headline figure and the same stretch cut into
+pieces:
 
 ```
-{ range, from, to, done, due, rate, buckets: [...], bucketNote, habits: [...] }
+{ range, from, to, done, due, rate, buckets: [...], bucketNote }
 ```
 
 A `rate` of -1 means nothing was due, which reads differently from 0%.
@@ -132,13 +131,6 @@ days that have closed, so it does not read low until Sunday.
 `DAILY` is always due, `WEEKDAYS` Monday to Friday, `CUSTOM_DAYS` on the chosen days. A
 `TIMES_PER_WEEK` habit stops asking once the week's target is in, rather than nagging for
 one more — except on the day it was done, so the student can still see the tick.
-
-## The week in review
-
-`GET /api/habits/summary` reports on the week that has just finished: the overall rate,
-the habit that went best, the one that slipped, and one suggestion. The suggestion is
-chosen by rule, and is always about making the habit easier to keep — set a reminder,
-drop a day, lower the weekly target — rather than telling the student off.
 
 ## Focus sessions
 

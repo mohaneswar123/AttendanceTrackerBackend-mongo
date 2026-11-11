@@ -28,13 +28,8 @@ public record HabitProgressResponse(
          * day long cannot judge a "3 times a week" habit, so those habits sit out the
          * day-sized pieces and the page says so rather than leaving the student to wonder.
          */
-        String bucketNote,
-        /** The same stretch, per habit, worst first so what needs attention is at the top */
-        List<HabitFigures> habits) {
+        String bucketNote) {
 
     public record Bucket(String label, String from, String to, int done, int due, int rate) {
-    }
-
-    public record HabitFigures(String habitId, String name, String icon, int done, int due, int rate) {
     }
 }
