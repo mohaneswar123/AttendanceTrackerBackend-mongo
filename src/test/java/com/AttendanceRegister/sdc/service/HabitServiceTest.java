@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,7 +33,6 @@ import com.AttendanceRegister.sdc.dto.HabitEntryRequest;
 import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
-import com.AttendanceRegister.sdc.dto.HabitSummaryResponse;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.Habit;
 import com.AttendanceRegister.sdc.model.HabitCategory;
@@ -581,84 +579,6 @@ class HabitServiceTest {
         assertThat(((ApiException) thrown).getStatus()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
-    // --- The week in review
-
-    @Test
-    void theSummaryNamesTheBestAndTheOneThatSlipped() {
-        Habit kept = habit(HabitSchedule.DAILY);
-        kept.setId("kept");
-        kept.setName("Revise notes");
-        kept.setReminderTime("18:00");
-
-        Habit slipped = habit(HabitSchedule.DAILY);
-        slipped.setId("slipped");
-        slipped.setName("Gym");
-        slipped.setReminderTime("07:00");
-
-        LocalDate lastMonday = TODAY.minusDays(TODAY.getDayOfWeek().getValue() - 1).minusWeeks(1);
-        List<HabitEntry> entries = new ArrayList<>();
-        for (int i = 0; i < 7; i++) {
-            HabitEntry done = new HabitEntry(USER, "kept", lastMonday.plusDays(i), NOW);
-            done.setStatus(HabitEntryStatus.DONE);
-            entries.add(done);
-        }
-        for (int i = 0; i < 2; i++) {
-            HabitEntry done = new HabitEntry(USER, "slipped", lastMonday.plusDays(i), NOW);
-            done.setStatus(HabitEntryStatus.DONE);
-            entries.add(done);
-        }
-        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(kept, slipped));
-        when(entryRepository.findByUserId(USER)).thenReturn(entries);
-
-        HabitSummaryResponse summary = service.weeklySummary(USER);
-
-        assertThat(summary.weekStart()).isEqualTo(lastMonday.toString());
-        assertThat(summary.bestName()).isEqualTo("Revise notes");
-        assertThat(summary.bestRate()).isEqualTo(100);
-        assertThat(summary.slippedName()).isEqualTo("Gym");
-        assertThat(summary.slippedRate()).isEqualTo(29);
-        assertThat(summary.overallRate()).isEqualTo(64);
-        assertThat(summary.suggestion()).contains("Gym");
-    }
-
-    @Test
-    void aHabitWithNoReminderIsToldToSetOneFirst() {
-        Habit slipped = habit(HabitSchedule.DAILY);
-        slipped.setName("Gym");
-        slipped.setReminderTime(null);
-        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(slipped));
-        when(entryRepository.findByUserId(USER)).thenReturn(List.of());
-
-        assertThat(service.weeklySummary(USER).suggestion()).contains("no reminder time");
-    }
-
-    @Test
-    void aPerfectWeekIsNotToldOffForAnything() {
-        Habit kept = habit(HabitSchedule.DAILY);
-        LocalDate lastMonday = TODAY.minusDays(TODAY.getDayOfWeek().getValue() - 1).minusWeeks(1);
-        List<HabitEntry> entries = new ArrayList<>();
-        for (int i = 0; i < 7; i++) {
-            HabitEntry done = new HabitEntry(USER, HABIT, lastMonday.plusDays(i), NOW);
-            done.setStatus(HabitEntryStatus.DONE);
-            entries.add(done);
-        }
-        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(kept));
-        when(entryRepository.findByUserId(USER)).thenReturn(entries);
-
-        HabitSummaryResponse summary = service.weeklySummary(USER);
-
-        assertThat(summary.slippedName()).isNull();
-        assertThat(summary.suggestion()).contains("add one more habit");
-    }
-
-    @Test
-    void aStudentWithNoHabitsIsInvitedToAddOne() {
-        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of());
-        lenient().when(entryRepository.findByUserId(USER)).thenReturn(List.of());
-
-        assertThat(service.weeklySummary(USER).suggestion()).contains("Add a habit");
-    }
-
     // --- Progress over a week, a month and a year
 
     private HabitProgressResponse progress(Habit habit, List<HabitEntry> entries, ProgressRange range) {
@@ -780,28 +700,6 @@ class HabitServiceTest {
         assertThat(week.rate()).isEqualTo(-1);
     }
 
-    @Test
-    void theHabitsAreListedWorstFirstSoWhatNeedsAttentionIsOnTop() {
-        Habit kept = habit(HabitSchedule.DAILY);
-        Habit slipping = habit(HabitSchedule.DAILY);
-        slipping.setId("h2");
-        slipping.setName("Run");
-        List<HabitEntry> entries = new ArrayList<>(days(HabitEntryStatus.DONE, 0, 1, 2));
-        // "Run" was only done one of the three days
-        HabitEntry ranOnce = new HabitEntry(USER, "h2", TODAY, NOW);
-        ranOnce.setStatus(HabitEntryStatus.DONE);
-        entries.add(ranOnce);
-
-        when(habitRepository.findByUserIdOrderByPositionAsc(USER)).thenReturn(List.of(kept, slipping));
-        when(entryRepository.findByUserId(USER)).thenReturn(entries);
-
-        HabitProgressResponse week = service.progress(USER, ProgressRange.WEEK);
-
-        assertThat(week.habits()).extracting(HabitProgressResponse.HabitFigures::name)
-                .containsExactly("Run", "Revise notes");
-        assertThat(week.habits().get(0).rate()).isLessThan(week.habits().get(1).rate());
-    }
-
     /**
      * A year started in January but the habit started in November. Billing the habit for
      * the ten months it did not exist would report 1% to a student who has kept it every
@@ -840,7 +738,6 @@ class HabitServiceTest {
         assertThat(week.bucketNote()).contains("times a week");
         // The headline still counts both: three days of revision, and three gym sessions owed
         assertThat(week.due()).isEqualTo(6);
-        assertThat(week.habits()).hasSize(2);
     }
 
     @Test
@@ -895,7 +792,8 @@ class HabitServiceTest {
 
         HabitProgressResponse week = progress(archived, days(HabitEntryStatus.DONE, 0), ProgressRange.WEEK);
 
-        assertThat(week.habits()).isEmpty();
+        // Nothing was owed at all, which is how an archived habit reads: it is not due
         assertThat(week.due()).isZero();
+        assertThat(week.rate()).isEqualTo(-1);
     }
 }

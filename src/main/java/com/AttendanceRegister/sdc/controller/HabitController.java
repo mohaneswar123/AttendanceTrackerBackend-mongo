@@ -20,7 +20,6 @@ import com.AttendanceRegister.sdc.dto.HabitEntryResponse;
 import com.AttendanceRegister.sdc.dto.HabitProgressResponse;
 import com.AttendanceRegister.sdc.dto.HabitRequest;
 import com.AttendanceRegister.sdc.dto.HabitResponse;
-import com.AttendanceRegister.sdc.dto.HabitSummaryResponse;
 import com.AttendanceRegister.sdc.exception.ApiException;
 import com.AttendanceRegister.sdc.model.UserActionFeature;
 import com.AttendanceRegister.sdc.model.UserActionType;
@@ -60,12 +59,6 @@ public class HabitController {
             @RequestParam String to) {
 
         return ResponseEntity.ok(habitService.getEntries(studentId(jwt), from, to));
-    }
-
-    // ✅ Last week in review, with one suggestion
-    @GetMapping("/summary")
-    public ResponseEntity<HabitSummaryResponse> summary(@AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(habitService.weeklySummary(studentId(jwt)));
     }
 
     /**
