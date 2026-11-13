@@ -41,11 +41,14 @@ class SubjectServiceTest {
     @Mock
     private AttendanceRecordRepository attendanceRecordRepository;
 
+    @Mock
+    private AttendancePlanService planService;
+
     private SubjectService service;
 
     @BeforeEach
     void setUp() {
-        service = new SubjectService(subjectRepository, userRepository, attendanceRecordRepository);
+        service = new SubjectService(subjectRepository, userRepository, attendanceRecordRepository, planService);
     }
 
     private static Subject subject(String id, String name, String userId) {
@@ -247,6 +250,8 @@ class SubjectServiceTest {
         service.deleteSubjectForUser(SUBJECT, USER);
 
         verify(attendanceRecordRepository).deleteBySubjectIdAndUserId(SUBJECT, USER);
+        // The weekly plan loses this subject's classes in the same stroke
+        verify(planService).removeSubjectFromPlan(USER, SUBJECT);
         verify(subjectRepository).deleteById(SUBJECT);
     }
 
