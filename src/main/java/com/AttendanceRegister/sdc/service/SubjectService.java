@@ -16,11 +16,14 @@ public class SubjectService {
     private final AttendanceRecordRepository attendanceRecordRepository;
     private final SubjectRepository subjectRepository;
     private final UserRepository userRepository;
+    private final AttendancePlanService planService;
 
-    public SubjectService(SubjectRepository subjectRepository, UserRepository userRepository, AttendanceRecordRepository attendanceRecordRepository) {
+    public SubjectService(SubjectRepository subjectRepository, UserRepository userRepository,
+            AttendanceRecordRepository attendanceRecordRepository, AttendancePlanService planService) {
         this.subjectRepository = subjectRepository;
         this.userRepository = userRepository;
         this.attendanceRecordRepository = attendanceRecordRepository;
+        this.planService = planService;
     }
 
     static final int MAX_NAME_LENGTH = 40;
@@ -99,6 +102,8 @@ public class SubjectService {
         Subject subject = getOwned(subjectId, userId);
 
         attendanceRecordRepository.deleteBySubjectIdAndUserId(subject.getId(), userId);
+        // The weekly plan must not keep classes for a subject that no longer exists
+        planService.removeSubjectFromPlan(userId, subject.getId());
         subjectRepository.deleteById(subject.getId());
     }
 }
